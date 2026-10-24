@@ -102,6 +102,9 @@ export const SURVEY_STATUS = [
   ['cancelled', 'Cancelled', 'ملغي'],
 ];
 const COLLECTIONS = ['leads', 'quotes', 'orders', 'invoices', 'surveys'];
+const SETTINGS_KEYS = ['rates', 'content', 'company'];
+/** State slices that live on the server. Used for change tracking so a save only sends what changed. */
+const SYNCABLE = [...SETTINGS_KEYS, ...COLLECTIONS];
 
 /** Pick the department that carries most of the value in a cart / item list. */
 export const categorize = (items = []) => {
@@ -109,34 +112,6 @@ export const categorize = (items = []) => {
   items.forEach((i) => { if (i.dept) by[i.dept] = (by[i.dept] || 0) + Number(i.price || 0); });
   const top = Object.entries(by).sort((a, b) => b[1] - a[1])[0];
   return top ? top[0] : 'general';
-};
-
-/* ---------- Demo data (not loaded by default; kept for reference/testing) ---------- */
-const mk = (en, ar, dept, price, detail) => ({ id: uid('i'), label: { en, ar }, detail, dept, price });
-export const DEMO_DATA = {
-  leads: [
-    { id: 'c1', name: 'Omar Haddad', company: 'Levant Coffee Roasters', phone: '+962 79 555 1201', email: 'omar@levantcoffee.jo', tax: '10234567', stage: 'sent', source: 'Website Calculator', notes: 'New branch in Abdoun — full facade.', date: '2026-10-02' },
-    { id: 'c2', name: 'ليلى المصري', company: 'عيادات نبض للأسنان', phone: '+962 78 444 9087', email: 'layla@nabd-dental.jo', tax: '', stage: 'won', source: 'Referral', notes: 'تغليف زجاج سيكوريت + مطبوعات الافتتاح.', date: '2026-09-21' },
-    { id: 'c3', name: 'Khaled Nasser', company: 'Amman Expo Tech', phone: '+962 77 321 7788', email: 'khaled@ammanexpotech.com', tax: '20987654', stage: 'measure', source: 'Consultation Funnel', notes: 'Custom double-deck booth for Jordan Build Expo.', date: '2026-10-12' },
-    { id: 'c4', name: 'رنا الخطيب', company: 'بوتيك لمسة', phone: '+962 79 100 2233', email: 'rana@lamsa.jo', tax: '', stage: 'new', source: 'Website Calculator', notes: 'باقة سوشيال ميديا + كروت.', date: '2026-10-20' },
-  ],
-  quotes: [
-    { id: 'q1', no: 'Q-2026-001', clientId: 'c1', status: 'sent', discount: 100, vat: true, date: '2026-10-03', notes: 'Facade 6x1.2m', converted: false,
-      items: [mk('Alucobond + 3D Acrylic Illuminated Letters', 'ألكوبوند + حروف أكريليك مضيئة', 'signage', 468, '6 × 1.2 = 7.2 m²'), mk('Installation & Delivery', 'تركيب وتوصيل', 'signage', 43.2, '')] },
-    { id: 'q2', no: 'Q-2026-002', clientId: 'c2', status: 'approved', discount: 0, vat: true, date: '2026-09-23', notes: '', converted: true,
-      items: [mk('Securit Glass + Frosted Branding', 'زجاج سيكوريت + فروستد', 'signage', 330, '3 × 2 = 6 m²'), mk('Business Cards', 'كروت أعمال', 'printing', 48, 'qty 1000')] },
-    { id: 'q3', no: 'Q-2026-003', clientId: 'c3', status: 'draft', discount: 0, vat: true, date: '2026-10-13', notes: 'Custom booth 6x4', converted: false,
-      items: [mk('Custom Luxury Exhibition Booth', 'بوث معارض كستمايزد', 'signage', 5280, '6 × 4 = 24 m²')] },
-  ],
-  orders: [
-    { id: 'o1', quoteId: 'q2', clientId: 'c2', title: 'Nabd Dental — Glass + Print', stage: 'production', date: '2026-09-25', total: 438.48 },
-    { id: 'o2', quoteId: 'q3', clientId: 'c3', title: 'Amman Expo Tech — Custom Booth (Draft)', stage: 'draft', date: '2026-10-13', total: 6124.8 },
-  ],
-  invoices: [
-    { id: 'inv1', no: 'INV-2026-001', orderId: 'o1', clientId: 'c2', date: '2026-09-25', vat: true, vatRate: 16, discount: 0,
-      items: [mk('Securit Glass + Frosted Branding', 'زجاج سيكوريت + فروستد', 'signage', 330, '3 × 2 = 6 m²'), mk('Business Cards', 'كروت أعمال', 'printing', 48, 'qty 1000')],
-      payments: [{ id: 'p1', label: 'Down Payment / عربون', amount: 200, date: '2026-09-25' }] },
-  ],
 };
 
 /* ---------- Company profile + quotation / invoice look (Admin → Company & Quote Style) ---------- */
@@ -224,6 +199,8 @@ export const useApp = () => useContext(Ctx);
 export function Provider({ children }) {
   const [s, setS] = useState(load);
   const synced = useRef(false);
+  // Which server-backed slices the admin actually edited — only these get written back.
+  const dirty = useRef(new Set());
   useEffect(() => {
     // Private business data lives on the server only — never persist it in the visitor's browser.
     const { leads, quotes, orders, invoices, surveys, auth, ...pub } = s;
@@ -233,36 +210,43 @@ export function Provider({ children }) {
     document.documentElement.classList.toggle('dark', s.dark);
   }, [s]);
 
-  const upd = useCallback((p) => setS((o) => ({ ...o, ...(typeof p === 'function' ? p(o) : p) })), []);
+  // Server responses land here: they must not be marked dirty or every pull would echo back.
+  const applyServer = useCallback((p) => setS((o) => ({ ...o, ...p })), []);
+  const upd = useCallback((p) => setS((o) => {
+    const next = { ...o, ...(typeof p === 'function' ? p(o) : p) };
+    SYNCABLE.forEach((k) => { if (next[k] !== o[k]) dirty.current.add(k); });
+    return next;
+  }), []);
 
   /* ---------- Server sync: public settings on load; private data after admin login ---------- */
-  const pullRef = useRef(null);
   useEffect(() => {
     const pull = async (authed) => {
-      const { data: st } = await sb.from('settings').select('id,data').in('id', ['rates', 'content', 'company']);
+      const { data: st } = await sb.from('settings').select('id,data').in('id', SETTINGS_KEYS);
+      const next = {};
       (st || []).forEach((row) => {
-        if (row.id === 'rates') upd({ rates: migrateRates(row.data) });
-        if (row.id === 'content') upd({ content: { ...DEFAULT_CONTENT, ...row.data } });
-        if (row.id === 'company') upd({ company: { ...DEFAULT_COMPANY, ...row.data } });
+        if (row.id === 'rates') next.rates = migrateRates(row.data);
+        if (row.id === 'content') next.content = { ...DEFAULT_CONTENT, ...row.data };
+        if (row.id === 'company') next.company = { ...DEFAULT_COMPANY, ...row.data };
       });
-      if (!authed) { synced.current = false; return; }
+      if (Object.keys(next).length) applyServer(next);
+      if (!authed) { synced.current = false; dirty.current.clear(); return; }
       const out = {};
-      for (const t of ['leads', 'quotes', 'orders', 'invoices', 'surveys']) {
+      for (const t of COLLECTIONS) {
         const { data, error } = await sb.from(t).select('data');
         if (error) { if (error.status === 401) { await sb.auth.signOut(); } return; }
         out[t] = (data || []).map((r) => r.data).sort((a, b) => String(b.date).localeCompare(String(a.date)));
       }
-      upd(out);
+      applyServer(out);
+      dirty.current.clear();
       synced.current = true;
     };
-    pullRef.current = pull;
-    sb.auth.getSession().then(({ data }) => { upd({ auth: !!data.session }); pull(!!data.session); });
+    sb.auth.getSession().then(({ data }) => { applyServer({ auth: !!data.session }); pull(!!data.session); });
     const { data: sub } = sb.auth.onAuthStateChange((_e, sess) => {
-      upd(sess ? { auth: true } : { auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [] });
+      applyServer(sess ? { auth: true } : { auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [] });
       pull(!!sess);
     });
     return () => sub.subscription.unsubscribe();
-  }, [upd]);
+  }, [applyServer]);
 
   /* Admin: pick up new website submissions automatically (merge — never overwrite local edits in flight). */
   useEffect(() => {
@@ -281,19 +265,29 @@ export function Provider({ children }) {
     return () => clearInterval(id);
   }, [s.auth]);
 
-  /* Admin: debounced push after the first pull */
+  /* Admin: debounced push of edited slices only, after the first pull has completed */
   useEffect(() => {
-    if (!s.auth || !synced.current) return undefined;
+    if (!s.auth || !synced.current || !dirty.current.size) return undefined;
+    const keys = [...dirty.current];
     const t = setTimeout(async () => {
-      await sb.from('settings').upsert({ id: 'rates', data: s.rates });
-      await sb.from('settings').upsert({ id: 'content', data: s.content });
-      await sb.from('settings').upsert({ id: 'company', data: s.company });
-      for (const k of ['leads', 'quotes', 'orders', 'invoices', 'surveys']) {
-        await sb.from(k).upsert(s[k].map((r) => ({ id: r.id, data: r })));
+      const saved = [];
+      try {
+        for (const k of keys) {
+          const res = SETTINGS_KEYS.includes(k)
+            ? await sb.from('settings').upsert({ id: k, data: s[k] })
+            : await sb.from(k).upsert(s[k].map((r) => ({ id: r.id, data: r })));
+          if (res?.error) throw res.error;
+          saved.push(k);
+        }
+      } catch (e) {
+        console.error('save failed:', e);
+      } finally {
+        // Keep anything that failed queued for the next edit instead of silently dropping it.
+        saved.forEach((k) => dirty.current.delete(k));
       }
     }, 800);
     return () => clearTimeout(t);
-  }, [s.rates, s.content, s.company, s.leads, s.quotes, s.orders, s.invoices, s.surveys, s.auth]);
+  }, [s]);
 
   const lang = s.lang;
   const T = (en, ar) => (lang === 'ar' ? ar : en);

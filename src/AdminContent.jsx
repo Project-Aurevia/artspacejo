@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, ArrowUp, ArrowDown, ImagePlus } from 'lucide-react';
 import { useApp, uid, CATS } from './store.jsx';
-import { uploadMedia } from './supabase.js';
+import { uploadMedia } from './api.js';
 
 /* ---------- small shared inputs (module-level so inputs never lose focus) ---------- */
 export function Pair({ label, v, on, area }) {

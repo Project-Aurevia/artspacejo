@@ -2,7 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useApp } from './store.jsx';
-import { signedUrl } from './supabase.js';
+import { signedUrl } from './api.js';
 
 export const stageName = (list, id, lang) => { const s = list.find((x) => x[0] === id); return s ? s[lang === 'ar' ? 2 : 1] : id; };
 export const COLORS = { new: 'bg-sky-500/20 text-sky-400', contacted: 'bg-violet-500/20 text-violet-400', measure: 'bg-amber-500/20 text-amber-500', sent: 'bg-gold/25 text-gold', negotiation: 'bg-orange-500/20 text-orange-400', won: 'bg-emerald-500/20 text-emerald-500', lost: 'bg-red-500/20 text-red-400', draft: 'bg-zinc-500/20 text-zinc-400', approved: 'bg-emerald-500/20 text-emerald-500', rejected: 'bg-red-500/20 text-red-400' };
