@@ -25,8 +25,11 @@ const PORT = Number(process.env.PORT || 3000);
 // Production binds to loopback only (put Caddy/nginx in front). Override with HOST=0.0.0.0 if needed.
 const HOST = process.env.HOST || (prod ? '127.0.0.1' : 'localhost');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (prod ? '' : 'artspace2026');
-if (prod && (ADMIN_PASSWORD.length < 10 || ADMIN_PASSWORD === 'artspace2026')) {
-  console.error('\n  ✖ Refusing to start: set ADMIN_PASSWORD (min 10 chars, not the demo password) in production.\n');
+// A placeholder is as dangerous as the demo password: it passes a length check but is public.
+const PLACEHOLDER = new Set(['artspace2026', 'change-me-long-and-unique', 'change-this-to-a-long-unique-password']);
+const looksPlaceholder = PLACEHOLDER.has(ADMIN_PASSWORD) || /^change[-_ ]?me/i.test(ADMIN_PASSWORD);
+if (prod && (ADMIN_PASSWORD.length < 10 || looksPlaceholder)) {
+  console.error('\n  ✖ Refusing to start: set ADMIN_PASSWORD (min 10 chars, not the demo password or a CHANGE-ME placeholder) in production.\n');
   process.exit(1);
 }
 const SITE_URL = (process.env.SITE_URL || '').replace(/\/$/, '');
@@ -91,9 +94,13 @@ app.use(helmet({
       'script-src': ["'self'"],
       'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:'],
-      'img-src': ["'self'", 'data:', 'blob:'],
+      // https: lets the admin link images hosted elsewhere (project photos, client logos).
+      'img-src': ["'self'", 'data:', 'blob:', 'https:'],
       'connect-src': ["'self'"],
       'frame-ancestors': ["'none'"],
+      'frame-src': ["'none'"],
+      'form-action': ["'self'"],
+      'base-uri': ["'self'"],
       'object-src': ["'none'"],
       'upgrade-insecure-requests': null,
     },
@@ -101,7 +108,9 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
   hsts: prod ? undefined : false,
 }));
-app.use(express.json({ limit: '25mb' }));
+// Parsers are mounted per route: only admin bulk saves and the PDF email need more than 1 MB.
+const smallJson = express.json({ limit: '1mb' });
+const bigJson = express.json({ limit: '25mb' });
 
 const api = express.Router();
 const loginLimiter = rateLimit({ windowMs: 15 * 60e3, limit: 8, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many attempts. Try again later.' } });
@@ -109,7 +118,7 @@ const publicLimiter = rateLimit({ windowMs: 10 * 60e3, limit: 20, standardHeader
 const uploadLimiter = rateLimit({ windowMs: 10 * 60e3, limit: 10, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many uploads. Please try later.' } });
 const mailLimiter = rateLimit({ windowMs: 10 * 60e3, limit: 30, standardHeaders: true, legacyHeaders: false });
 
-api.post('/login', loginLimiter, (req, res) => {
+api.post('/login', smallJson, loginLimiter, (req, res) => {
   const { password = '' } = req.body || {};
   const okPass = safeEq(password, ADMIN_PASSWORD);
   if (okPass && ADMIN_PASSWORD) return res.json({ token: makeToken() });
@@ -117,12 +126,16 @@ api.post('/login', loginLimiter, (req, res) => {
 });
 api.get('/session', requireAuth, (_req, res) => res.json({ ok: true }));
 
+// Public capability probe: the admin UI uses it to choose SMTP delivery or the mailto fallback,
+// and uptime monitors get something cheap to poll.
+api.get('/health', (_req, res) => res.json({ ok: true, mail: !!smtp, production: prod, uptime: Math.round(process.uptime()) }));
+
 /* ----- settings (public read: rates/content/company are shown on the site; write: admin) ----- */
 api.get('/settings', (req, res) => {
   const ids = String(req.query.ids || '').split(',').filter((i) => SETTINGS.includes(i));
   res.json(getSettingsStmt.all().filter((r) => ids.includes(r.id)).map((r) => ({ id: r.id, data: JSON.parse(r.data) })));
 });
-api.put('/settings/:id', requireAuth, (req, res) => {
+api.put('/settings/:id', bigJson, requireAuth, (req, res) => {
   if (!SETTINGS.includes(req.params.id)) return res.status(404).json({ error: 'Unknown setting' });
   if (typeof req.body?.data !== 'object' || req.body.data === null) return res.status(400).json({ error: 'Bad payload' });
   putSettingStmt.run(req.params.id, JSON.stringify(req.body.data));
@@ -132,7 +145,7 @@ api.put('/settings/:id', requireAuth, (req, res) => {
 /* ----- admin collections ----- */
 const known = (req, res, next) => (COLLECTIONS.includes(req.params.t) ? next() : res.status(404).json({ error: 'Unknown collection' }));
 api.get('/c/:t', requireAuth, known, (req, res) => res.json(S[req.params.t].all.all().map((r) => ({ id: r.id, data: JSON.parse(r.data) }))));
-api.put('/c/:t', requireAuth, known, (req, res) => {
+api.put('/c/:t', bigJson, requireAuth, known, (req, res) => {
   const { rows, deleted = [] } = req.body || {};
   if (!Array.isArray(rows) || !Array.isArray(deleted) || rows.some((r) => !r || typeof r.id !== 'string' || typeof r.data !== 'object')) return res.status(400).json({ error: 'Bad payload' });
   saveCollection(req.params.t, rows, deleted.filter((d) => typeof d === 'string'));
@@ -157,7 +170,7 @@ const topDept = (items) => {
   const t = Object.entries(by).sort((a, b) => b[1] - a[1])[0]; return t ? t[0] : 'general';
 };
 
-api.post('/submit', publicLimiter, (req, res) => {
+api.post('/submit', smallJson, publicLimiter, (req, res) => {
   const b = req.body || {};
   const kind = KINDS[b.kind];
   if (!kind) return res.status(400).json({ error: 'Unknown form' });
@@ -260,7 +273,7 @@ api.post('/media', requireAuth, raw('10mb'), (req, res) => {
 });
 
 /* ----- email a quote/invoice PDF (admin) ----- */
-api.post('/fn/send-quote', requireAuth, mailLimiter, async (req, res) => {
+api.post('/fn/send-quote', bigJson, requireAuth, mailLimiter, async (req, res) => {
   if (!smtp) return res.status(501).json({ error: 'SMTP is not configured on the server (set SMTP_HOST, SMTP_USER, SMTP_PASS, MAIL_FROM).' });
   const { to, subject, html, filename, pdfBase64, replyTo } = req.body || {};
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to || '') || !pdfBase64) return res.status(400).json({ error: 'Missing recipient or PDF' });
@@ -285,8 +298,10 @@ app.get('/robots.txt', (req, res) => {
 });
 app.get('/sitemap.xml', (req, res) => {
   const base = SITE_URL || `${req.protocol}://${req.get('host')}`;
-  const sections = ['', '#signage', '#printing', '#social', '#marketing', '#calculator', '#portfolio', '#testimonials', '#survey'];
-  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sections.slice(0, 1).map((s) => `<url><loc>${base}/${s}</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>`).join('\n')}\n</urlset>\n`);
+  // The whole site is one page; section anchors are not separate URLs, so the home
+  // page is the only indexable entry. Add real routes here if more pages appear.
+  const urls = ['/'].map((p) => `  <url><loc>${base}${p}</loc><lastmod>${today()}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>`);
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`);
 });
 
 if (prod) {
@@ -300,15 +315,21 @@ if (prod) {
         '@context': 'https://schema.org', '@type': 'LocalBusiness', name: c.name?.en || 'Art Space', alternateName: c.name?.ar || 'مساحة الفن',
         url: base, telephone: c.phone || undefined, email: c.email || undefined,
         address: { '@type': 'PostalAddress', streetAddress: c.address?.en || 'Amman', addressCountry: 'JO' },
-        image: c.logo ? (c.logo.startsWith('http') ? c.logo : base + c.logo) : `${base}/favicon.svg`,
+        image: c.logo ? (c.logo.startsWith('http') ? c.logo : base + c.logo) : `${base}/og-image.png`,
         areaServed: 'JO', priceRange: '$$',
       };
       const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8')
+        // Social scrapers require absolute image URLs — resolve them against the real origin.
+        .replaceAll('content="/og-image.png"', `content="${base}/og-image.png"`)
         .replace('<!--SEO_JSONLD-->', `<link rel="canonical" href="${base}/" /><script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>`);
+      // The shell references hashed assets, so it must never be cached on its own.
+      res.setHeader('Cache-Control', 'no-store');
       res.type('html').send(html);
     } catch { res.sendFile(path.join(dist, 'index.html')); }
   };
   app.get('/', page);
+  // Vite content-hashes every asset name, so those files can be cached forever.
+  app.use('/assets', express.static(path.join(dist, 'assets'), { index: false, maxAge: '1y', immutable: true }));
   app.use(express.static(dist, { index: false, maxAge: '1h' }));
   app.get('/{*splat}', page);
 } else {

@@ -45,9 +45,14 @@ const table = (t) => {
       if (!res.error) known[t] = keep;
       return res;
     },
-    insert: (row) => call(`/c/${t}`, { method: 'POST', body: row }),
   };
 };
+
+/** Public server capabilities — used to decide between SMTP delivery and the mailto fallback. */
+export async function serverHealth() {
+  const { data, error } = await call('/health');
+  return error ? { ok: false, mail: false, production: false } : data;
+}
 
 export const sb = {
   from: table,

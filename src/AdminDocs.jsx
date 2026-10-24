@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Printer, Plus, Trash2, Copy, Download, Mail, MessageCircle, ArrowRightCircle, Send, Eye, Pencil } from 'lucide-react';
 import { useApp, totals, uid, ORDER_STAGES, QUOTE_STATUS } from './store.jsx';
 import { Doc, renderPdf, StylePicker } from './Documents.jsx';
-import { sb } from './supabase.js';
+import { sb, serverHealth } from './api.js';
 import { Modal, Stat, Badge, FileLink, Field, stageName } from './ui.jsx';
 
 const DEPTS = [['signage', 'Signage', 'آرمات'], ['printing', 'Printing', 'مطبوعات'], ['social', 'Social', 'سوشيال'], ['marketing', 'Marketing', 'تسويق']];
@@ -89,6 +89,14 @@ function PdfBar({ kind, doc, client, dl, setDl, onSent }) {
   const [busy, setBusy] = useState('');
   const [to, setTo] = useState(client?.email || '');
   const [note, setNote] = useState('');
+  // null = not probed yet. The server tells us whether SMTP is configured, so we can
+  // route to real delivery or to the download + mailto fallback instead of guessing.
+  const [canMail, setCanMail] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    serverHealth().then((h) => { if (alive) setCanMail(!!(h?.ok && h?.mail)); });
+    return () => { alive = false; };
+  }, []);
   const fname = `${doc.no}.pdf`;
   const total = money(totals(doc, rates.vat).total);
   const isInv = kind === 'invoice';
@@ -96,21 +104,34 @@ function PdfBar({ kind, doc, client, dl, setDl, onSent }) {
   const body = `${T('Hello', 'مرحباً')} ${client?.name || ''},\n\n${note ? note + '\n\n' : ''}${T('Please find attached', 'مرفق لكم')} ${isInv ? T('invoice', 'الفاتورة') : T('quotation', 'عرض السعر')} ${doc.no} — ${T('Total', 'الإجمالي')}: ${total}.\n\n${tx(company.name)}\n${company.phone || ''}`;
   const el = () => document.getElementById('print-area');
   const download = async () => { setBusy('dl'); try { await renderPdf(el(), fname); } catch (e) { alert(e.message); } setBusy(''); };
+  // Download the PDF and open the mail client — works with no server-side mail setup.
+  const mailto = async () => {
+    await renderPdf(el(), fname);
+    window.location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + '\n\n(' + T('Attach the downloaded PDF', 'أرفق ملف PDF الذي تم تنزيله') + ')')}`;
+    onSent?.();
+  };
   const email = async () => {
     if (!to) return alert(T('Enter the recipient email.', 'أدخل بريد المستلم.'));
     setBusy('mail');
     try {
-      if (sb) {
-        const pdfBase64 = await renderPdf(el(), fname, true);
-        const html = body.replace(/\n/g, '<br>');
-        const { error } = await sb.functions.invoke('send-quote', { body: { to, subject, html, filename: fname, pdfBase64, replyTo: company.email } });
-        if (error) throw error;
-        alert(T('Email sent with the PDF attached.', 'تم إرسال البريد مع ملف PDF.'));
-        onSent?.();
+      const health = canMail === null ? await serverHealth() : { ok: true, mail: canMail };
+      if (health.ok && health.mail) {
+        try {
+          const pdfBase64 = await renderPdf(el(), fname, true);
+          const html = body.replace(/\n/g, '<br>');
+          const { error } = await sb.functions.invoke('send-quote', { body: { to, subject, html, filename: fname, pdfBase64, replyTo: company.email } });
+          if (error) throw error;
+          setCanMail(true);
+          alert(T('Email sent with the PDF attached.', 'تم إرسال البريد مع ملف PDF.'));
+          onSent?.();
+        } catch (e) {
+          // SMTP was configured but rejected the message — still get the PDF to the client.
+          console.warn('SMTP delivery failed, falling back to mailto:', e);
+          await mailto();
+        }
       } else {
-        await renderPdf(el(), fname);
-        window.location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + '\n\n(' + T('Attach the downloaded PDF', 'أرفق ملف PDF الذي تم تنزيله') + ')')}`;
-        onSent?.();
+        setCanMail(false);
+        await mailto();
       }
     } catch (e) { alert(T('Could not send: ', 'تعذر الإرسال: ') + (e.message || e)); }
     setBusy('');
@@ -130,7 +151,7 @@ function PdfBar({ kind, doc, client, dl, setDl, onSent }) {
         <button type="button" className="btn-ghost" onClick={() => window.print()}><Printer size={15} />{T('Print', 'طباعة')}</button>
         <a className="btn-ghost" target="_blank" rel="noreferrer" href={`https://wa.me/${(client?.phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(body)}`}><MessageCircle size={15} />WhatsApp</a>
       </div>
-      {!sb && <p className="text-[11px] opacity-50">{T('Demo mode: the PDF is downloaded and your mail app opens — attach the file. Connect Supabase + the send-quote function to email automatically.', 'وضع تجريبي: يتم تنزيل الملف ويفتح برنامج البريد — أرفق الملف. اربط Supabase ودالة send-quote للإرسال التلقائي.')}</p>}
+      {canMail === false && <p className="text-[11px] opacity-50">{T('SMTP is not configured: the PDF downloads and your mail app opens — attach the file. Add SMTP_HOST/USER/PASS in .env to email automatically.', 'لم يتم ضبط SMTP: يتم تنزيل الملف ويفتح برنامج البريد — أرفق الملف. أضف SMTP_HOST وSMTP_USER وSMTP_PASS في ملف ‎.env‎ للإرسال التلقائي.')}</p>}
     </div>
   );
 }
