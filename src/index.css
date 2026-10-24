@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html { scroll-behavior: smooth; }
+body { @apply bg-cream-50 text-ink font-sans antialiased; }
+.dark body { @apply bg-ink text-cream; }
+[dir='rtl'] body, [dir='rtl'] button, [dir='rtl'] input, [dir='rtl'] select, [dir='rtl'] textarea { font-family: 'Cairo', sans-serif; }
+
+@layer components {
+  .glass { @apply bg-white/60 dark:bg-white/5 backdrop-blur-xl border border-black/5 dark:border-white/10 rounded-2xl shadow-sm; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-95; }
+  .btn-gold { @apply btn bg-gold text-ink hover:bg-gold-light hover:shadow-lg hover:shadow-gold/20; }
+  .btn-ghost { @apply btn border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10; }
+  .btn-terra { @apply btn bg-terra text-white hover:bg-terra-dark; }
+  .input { @apply w-full rounded-xl border border-black/10 dark:border-white/15 bg-white/70 dark:bg-white/5 px-3 py-2 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/30 transition; }
+  .label { @apply block text-xs font-semibold mb-1 opacity-70; }
+  .card-hover { @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-gold/10; }
+  .badge { @apply inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold; }
+}
+
+@media print {
+  @page { size: A4; margin: 0; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body * { visibility: hidden !important; }
+  #print-area, #print-area * { visibility: visible !important; }
+  #print-area { position: absolute !important; top: 0; left: 0; width: 210mm !important; min-height: 297mm !important; background: #fff !important; }
+  .no-print { display: none !important; }
+}

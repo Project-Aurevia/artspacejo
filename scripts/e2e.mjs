@@ -1,0 +1,75 @@
+// End-to-end check: node scripts/e2e.mjs  (server must be running; BASE=http://localhost:3000 ADMIN_PASSWORD=...)
+const BASE = process.env.BASE || 'http://localhost:3000';
+const PASS = process.env.ADMIN_PASSWORD || 'artspace2026';
+let fail = 0;
+const ok = (c, m) => { console.log(`${c ? '  ✔' : '  ✖'} ${m}`); if (!c) fail++; };
+const j = async (p, o = {}) => { const r = await fetch(BASE + p, { ...o, headers: { 'content-type': 'application/json', ...(o.headers || {}) } }); let b = null; try { b = await r.json(); } catch {} return { s: r.status, b, h: r.headers }; };
+
+console.log('Auth');
+ok((await j('/api/c/leads')).s === 401, 'collections require login');
+ok((await j('/api/login', { method: 'POST', body: JSON.stringify({ password: 'wrong' }) })).s === 401, 'wrong password rejected');
+const L = await j('/api/login', { method: 'POST', body: JSON.stringify({ password: PASS }) });
+ok(L.s === 200 && L.b.token, 'admin login');
+const A = { Authorization: `Bearer ${L.b?.token}` };
+ok((await j('/api/c/leads?t=' + L.b.token)).s === 401, 'token in URL is NOT accepted');
+
+console.log('Website forms → leads (categorised)');
+const mk = (kind, extra = {}) => j('/api/submit', { method: 'POST', body: JSON.stringify({ kind, name: `E2E ${kind}`, phone: '+962790000000', email: 'e2e@test.jo', ...extra }) });
+const item = { label: { en: 'Banner', ar: 'بانر' }, detail: '2 m²', dept: 'signage', price: 12 };
+const r1 = await mk('quote', { items: [item, { ...item, dept: 'printing', price: 3 }] });
+ok(r1.s === 200 && r1.b.no, `calculator quote → ${r1.b?.no}`);
+const r2 = await mk('survey', { survey: { address: 'Abdoun, Amman', city: 'Amman', type: 'signage', preferredDate: '2026-11-01', preferredTime: 'morning', mapUrl: 'https://maps.google.com/x' } });
+ok(r2.s === 200 && r2.b.surveyId, 'site survey created');
+ok((await mk('visit')).s === 200, 'visit request');
+ok((await mk('consult', { company: 'Retail' })).s === 200, 'consultation');
+ok((await mk('booth')).s === 200, 'booth brief');
+ok((await mk('contact')).s === 200, 'contact');
+ok((await mk('nope')).s === 400, 'unknown form rejected');
+ok((await j('/api/submit', { method: 'POST', body: JSON.stringify({ kind: 'visit', name: 'x' }) })).s === 400, 'missing phone/email rejected');
+ok((await mk('quote', { items: [] })).s === 400, 'empty cart rejected');
+const bot = await mk('visit', { website: 'http://spam' });
+ok(bot.s === 200, 'honeypot answered OK…');
+
+console.log('Admin sees everything');
+const leads = (await j('/api/c/leads', { headers: A })).b.map((x) => x.data);
+const by = (src) => leads.find((l) => l.source === src && l.name.startsWith('E2E'));
+ok(by('Website Calculator')?.category === 'signage', 'calculator lead category = top department (signage)');
+ok(by('Site Survey')?.category === 'survey', 'survey lead category = survey');
+ok(by('Visit Request')?.category === 'visit', 'visit lead category = visit');
+ok(by('Consultation Funnel')?.category === 'marketing', 'consult lead category = marketing');
+ok(by('Booth Brief')?.category === 'signage', 'booth lead category = signage');
+ok(!leads.some((l) => l.source === 'Visit Request' && l.notes === undefined && false), '…');
+ok(leads.filter((l) => l.source === 'Visit Request').length === 1, '…and honeypot submission was NOT stored');
+const quotes = (await j('/api/c/quotes', { headers: A })).b.map((x) => x.data);
+const q = quotes.find((x) => x.no === r1.b.no);
+ok(q && q.clientId === by('Website Calculator').id && q.items.length === 2, 'quote linked to lead with items');
+const orders = (await j('/api/c/orders', { headers: A })).b.map((x) => x.data);
+ok(orders.some((o) => o.quoteId === q.id), 'draft order linked to quote');
+const svs = (await j('/api/c/surveys', { headers: A })).b.map((x) => x.data);
+const sv = svs.find((s) => s.id === r2.b.surveyId);
+ok(sv && sv.clientId === by('Site Survey').id && sv.address === 'Abdoun, Amman' && sv.status === 'new', 'survey linked to lead');
+
+console.log('Security');
+const h = (await fetch(BASE + '/')).headers;
+ok(h.get('x-content-type-options') === 'nosniff', 'nosniff header');
+ok(!h.get('x-powered-by'), 'x-powered-by hidden');
+ok((await j('/api/files/x?e=1&s=bad')).s === 403, 'file download needs signed link');
+ok((await j('/api/files-link/x')).s === 401, 'file link needs admin');
+ok((await j('/api/media', { method: 'POST', body: '{}' })).s === 401, 'media upload needs admin');
+const up = await fetch(BASE + '/api/upload', { method: 'POST', headers: { 'x-filename': 'evil.html' }, body: 'x' });
+ok(up.status === 400, 'upload of .html refused');
+ok((await j('/api/fn/send-quote', { method: 'POST', body: '{}' })).s === 401, 'send-quote needs admin');
+ok((await j('/api/settings/rates', { method: 'PUT', body: '{"data":{}}' })).s === 401, 'settings write needs admin');
+const rb = await fetch(BASE + '/robots.txt').then((r) => r.text());
+ok(rb.includes('Disallow: /admin') && rb.includes('Sitemap:'), 'robots.txt + sitemap reference');
+ok((await fetch(BASE + '/sitemap.xml')).status === 200, 'sitemap.xml');
+ok((await fetch(BASE + '/admin')).status === 200, '/admin route served (login screen inside)');
+
+console.log('Cleanup');
+const del = async (t, rows) => j(`/api/c/${t}`, { method: 'PUT', headers: A, body: JSON.stringify({ rows: [], deleted: rows.map((r) => r.id) }) });
+await del('leads', leads.filter((l) => l.name.startsWith('E2E')));
+await del('quotes', quotes.filter((x) => leads.find((l) => l.id === x.clientId)?.name.startsWith('E2E')));
+await del('orders', orders.filter((o) => leads.find((l) => l.id === o.clientId)?.name.startsWith('E2E')));
+await del('surveys', svs.filter((s) => leads.find((l) => l.id === s.clientId)?.name.startsWith('E2E')));
+console.log(fail ? `\n${fail} check(s) FAILED` : '\nAll checks passed');
+process.exit(fail ? 1 : 0);

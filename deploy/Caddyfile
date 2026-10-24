@@ -1,0 +1,13 @@
+www.yourdomain.com {
+	encode gzip zstd
+	reverse_proxy 127.0.0.1:3000
+	# Caddy obtains and renews the HTTPS certificate automatically.
+	request_body {
+		max_size 30MB
+	}
+}
+
+# Optional: redirect the bare domain
+yourdomain.com {
+	redir https://www.yourdomain.com{uri} permanent
+}
