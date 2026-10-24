@@ -1,6 +1,6 @@
 // Art Space — self-contained server: Express + SQLite (single file) + local file storage.
-//   npm run dev   -> API + Vite dev server (http://localhost:3000)
-//   npm start     -> build + serve from one process (production)
+//   npm run dev   -> API + Vite (middleware mode) on http://127.0.0.1:3000
+//   npm run build && npm start -> serve dist from one process (production)
 // Env: PORT, HOST, ADMIN_PASSWORD (required in production), ADMIN_EMAIL, DATA_DIR, SITE_URL,
 //      SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM, NOTIFY_TO, TRUST_PROXY
 import express from 'express';
@@ -22,8 +22,10 @@ fs.mkdirSync(MEDIA, { recursive: true });
 
 const prod = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT || 3000);
-// Production binds to loopback only (put Caddy/nginx in front). Override with HOST=0.0.0.0 if needed.
-const HOST = process.env.HOST || (prod ? '127.0.0.1' : 'localhost');
+// Loopback in both modes. "localhost" can resolve to ::1 only, which leaves http://127.0.0.1
+// refusing connections; bind the IPv4 literal instead. Put Caddy/nginx in front, or set
+// HOST=0.0.0.0 to expose the port directly.
+const HOST = process.env.HOST || '127.0.0.1';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (prod ? '' : 'artspace2026');
 // A placeholder is as dangerous as the demo password: it passes a length check but is public.
 const PLACEHOLDER = new Set(['artspace2026', 'change-me-long-and-unique', 'change-this-to-a-long-unique-password']);
@@ -340,7 +342,9 @@ if (prod) {
 app.use((err, _req, res, _next) => { console.error(err); res.status(err.status || 500).json({ error: err.status === 413 ? 'Payload too large' : 'Server error' }); });
 
 app.listen(PORT, HOST, () => {
-  console.log(`\n  Art Space running on http://${HOST}:${PORT}  (${prod ? 'production' : 'development'})`);
+  // A wildcard bind is not a browsable address; print something the user can click.
+  const shown = HOST === '0.0.0.0' || HOST === '::' ? 'localhost' : HOST;
+  console.log(`\n  Art Space running on http://${shown}:${PORT}  (${prod ? 'production' : 'development'})`);
   console.log(`  Data folder: ${DATA}`);
   console.log(`  Email (SMTP): ${smtp ? 'enabled' : 'not configured (optional)'}`);
   if (!prod) console.log('  ⚠ Dev mode: demo admin password in use. Production requires ADMIN_PASSWORD.');

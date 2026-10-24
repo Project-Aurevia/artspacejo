@@ -10,7 +10,7 @@ native bindings only for modern Node releases.
 ```bash
 npm ci
 cp .env.example .env   # optional in dev; ADMIN_PASSWORD defaults to artspace2026
-npm run dev            # http://localhost:3000  (site + API + Vite middleware, hot reload)
+npm run dev            # http://127.0.0.1:3000  (site + API + Vite middleware, hot reload)
 ```
 - Public site: `/`  ·  Admin panel: `/admin` (not linked from the site)
 - Dev admin password: `artspace2026` (dev only — production refuses to start with it)
@@ -43,7 +43,7 @@ or still one of the shipped placeholders (`artspace2026`, `CHANGE-ME…`).
 | Env | Purpose |
 |---|---|
 | `ADMIN_PASSWORD` | admin login (required in production) |
-| `PORT`, `HOST` | default `3000`, `127.0.0.1` in production |
+| `PORT`, `HOST` | default `3000` and `127.0.0.1` (loopback in dev too; set `HOST=0.0.0.0` to expose) |
 | `SITE_URL` | public URL for canonical / sitemap / robots / Open Graph images |
 | `DATA_DIR` | database + uploads folder (default `./data`) |
 | `TRUST_PROXY` | `true` behind a reverse proxy so rate limits see real IPs |
