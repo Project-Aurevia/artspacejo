@@ -41,7 +41,7 @@ const SITE_URL = (process.env.SITE_URL || '').replace(/\/$/, '');
 /* ---------------- database ---------------- */
 const db = new Database(path.join(DATA, 'artspace.db'));
 db.pragma('journal_mode = WAL');
-const COLLECTIONS = ['leads', 'quotes', 'orders', 'invoices', 'surveys'];
+const COLLECTIONS = ['leads', 'quotes', 'orders', 'invoices', 'surveys', 'purchases', 'cash'];
 const SETTINGS = ['rates', 'content', 'company'];
 db.exec('CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, data TEXT NOT NULL)');
 COLLECTIONS.forEach((t) => db.exec(`CREATE TABLE IF NOT EXISTS ${t} (id TEXT PRIMARY KEY, data TEXT NOT NULL)`));

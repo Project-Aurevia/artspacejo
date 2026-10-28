@@ -49,6 +49,20 @@ const svs = (await j('/api/c/surveys', { headers: A })).b.map((x) => x.data);
 const sv = svs.find((s) => s.id === r2.b.surveyId);
 ok(sv && sv.clientId === by('Site Survey').id && sv.address === 'Abdoun, Amman' && sv.status === 'new', 'survey linked to lead');
 
+console.log('Accounting books (purchases + petty cash)');
+const pur = { id: 'e2e-pur', no: 'PUR-E2E-001', date: '2026-03-01', due: '2026-03-31', supplier: 'E2E Supplier', cat: 'materials', amount: 40, vat: true, vatRate: 16, paid: 0 };
+const day = { id: 'e2e-cash', date: '2026-03-01', open: 100, closed: false, expenses: [{ id: 'e2e-e1', label: 'E2E tape', amount: 12.5, cat: 'supplies' }] };
+ok((await j('/api/c/purchases', { method: 'PUT', body: JSON.stringify({ rows: [] }) })).s === 401, 'purchases write needs admin');
+ok((await j('/api/c/cash', { method: 'PUT', body: JSON.stringify({ rows: [] }) })).s === 401, 'petty cash write needs admin');
+const putP = await j('/api/c/purchases', { method: 'PUT', headers: A, body: JSON.stringify({ rows: [{ id: pur.id, data: pur }] }) });
+const putC = await j('/api/c/cash', { method: 'PUT', headers: A, body: JSON.stringify({ rows: [{ id: day.id, data: day }] }) });
+ok(putP.s === 200 && putC.s === 200, 'supplier bill + cash day saved');
+const gotP = (await j('/api/c/purchases', { headers: A })).b.map((x) => x.data).find((x) => x.id === pur.id);
+const gotC = (await j('/api/c/cash', { headers: A })).b.map((x) => x.data).find((x) => x.id === day.id);
+ok(gotP?.amount === 40 && gotP?.supplier === 'E2E Supplier' && gotP?.vatRate === 16, 'purchase round-tripped intact');
+ok(gotC?.open === 100 && gotC?.expenses?.length === 1 && gotC.expenses[0].amount === 12.5, 'petty cash day round-tripped with its expenses');
+ok((await j('/api/c/nope', { headers: A })).s === 404, 'unknown collection rejected');
+
 console.log('Security');
 const h = (await fetch(BASE + '/')).headers;
 ok(h.get('x-content-type-options') === 'nosniff', 'nosniff header');
@@ -71,5 +85,7 @@ await del('leads', leads.filter((l) => l.name.startsWith('E2E')));
 await del('quotes', quotes.filter((x) => leads.find((l) => l.id === x.clientId)?.name.startsWith('E2E')));
 await del('orders', orders.filter((o) => leads.find((l) => l.id === o.clientId)?.name.startsWith('E2E')));
 await del('surveys', svs.filter((s) => leads.find((l) => l.id === s.clientId)?.name.startsWith('E2E')));
+await del('purchases', [pur]);
+await del('cash', [day]);
 console.log(fail ? `\n${fail} check(s) FAILED` : '\nAll checks passed');
 process.exit(fail ? 1 : 0);

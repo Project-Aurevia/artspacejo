@@ -101,7 +101,7 @@ export const SURVEY_STATUS = [
   ['done', 'Completed', 'منجز'],
   ['cancelled', 'Cancelled', 'ملغي'],
 ];
-const COLLECTIONS = ['leads', 'quotes', 'orders', 'invoices', 'surveys'];
+const COLLECTIONS = ['leads', 'quotes', 'orders', 'invoices', 'surveys', 'purchases', 'cash'];
 const SETTINGS_KEYS = ['rates', 'content', 'company'];
 /** State slices that live on the server. Used for change tracking so a save only sends what changed. */
 const SYNCABLE = [...SETTINGS_KEYS, ...COLLECTIONS];
@@ -187,10 +187,10 @@ const load = () => {
     const s = JSON.parse(localStorage.getItem(KEY));
     if (s) {
       const { adminPass, ...rest } = s; // never keep a password in client state
-      return { ...rest, auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [], rates: migrateRates(s.rates), content: { ...DEFAULT_CONTENT, ...(s.content || {}) }, company: { ...DEFAULT_COMPANY, ...(s.company || {}) } };
+      return { ...rest, auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], rates: migrateRates(s.rates), content: { ...DEFAULT_CONTENT, ...(s.content || {}) }, company: { ...DEFAULT_COMPANY, ...(s.company || {}) } };
     }
   } catch {}
-  return { lang: 'ar', dark: true, mode: 'site', auth: false, rates: DEFAULT_RATES, content: DEFAULT_CONTENT, company: DEFAULT_COMPANY, cart: [], leads: [], quotes: [], orders: [], invoices: [], surveys: [] };
+  return { lang: 'ar', dark: true, mode: 'site', auth: false, rates: DEFAULT_RATES, content: DEFAULT_CONTENT, company: DEFAULT_COMPANY, cart: [], leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [] };
 };
 
 const Ctx = createContext();
@@ -203,7 +203,7 @@ export function Provider({ children }) {
   const dirty = useRef(new Set());
   useEffect(() => {
     // Private business data lives on the server only — never persist it in the visitor's browser.
-    const { leads, quotes, orders, invoices, surveys, auth, ...pub } = s;
+    const { leads, quotes, orders, invoices, surveys, purchases, cash, auth, ...pub } = s;
     localStorage.setItem(KEY, JSON.stringify(pub));
     document.documentElement.dir = s.lang === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = s.lang;
@@ -242,7 +242,7 @@ export function Provider({ children }) {
     };
     sb.auth.getSession().then(({ data }) => { applyServer({ auth: !!data.session }); pull(!!data.session); });
     const { data: sub } = sb.auth.onAuthStateChange((_e, sess) => {
-      applyServer(sess ? { auth: true } : { auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [] });
+      applyServer(sess ? { auth: true } : { auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [] });
       pull(!!sess);
     });
     return () => sub.subscription.unsubscribe();
@@ -252,7 +252,7 @@ export function Provider({ children }) {
   useEffect(() => {
     if (!s.auth) return undefined;
     const id = setInterval(async () => {
-      for (const t of ['leads', 'quotes', 'orders', 'surveys']) {
+      for (const t of ['leads', 'quotes', 'orders', 'surveys', 'purchases', 'cash']) {
         const { data } = await sb.from(t).select('data');
         if (!data) continue;
         setS((o) => {
