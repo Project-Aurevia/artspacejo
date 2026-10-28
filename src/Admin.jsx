@@ -9,6 +9,7 @@ import { signageQuote, printQuote, addonOn } from './pricing.js';
 import CompanySettings from './AdminCompany.jsx';
 import Surveys from './AdminSurveys.jsx';
 import { Quotes, Orders, Invoices } from './AdminDocs.jsx';
+import Accounting from './AdminAccounting.jsx';
 import { Modal, Stat, Badge, FileLink, Field, stageName } from './ui.jsx';
 import { sb, serverHealth } from './api.js';
 import { useApp, totals, LEAD_STAGES, LEAD_CATS, ORDER_STAGES, QUOTE_STATUS, DEFAULT_RATES } from './store.jsx';
@@ -399,13 +400,13 @@ function Multipliers() {
 }
 
 function Pricing() {
-  const { T, rates, upd, resetAll, leads, quotes, orders, invoices, surveys, content, company } = useApp();
+  const { T, rates, upd, resetAll, leads, quotes, orders, invoices, surveys, purchases, cash, content, company } = useApp();
   const [g, setG] = useState('area');
   const [q, setQ] = useState('');
   const cur = PRICE_GROUPS.find((x) => x[0] === g) || PRICE_GROUPS[0];
   const count = (key) => Object.keys(rates[key] || {}).length;
   const exportData = () => {
-    const data = JSON.stringify({ version: 2, rates, content, company, leads, quotes, orders, invoices, surveys }, null, 1);
+    const data = JSON.stringify({ version: 3, rates, content, company, leads, quotes, orders, invoices, surveys, purchases, cash }, null, 1);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
     a.download = `artspace-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -420,7 +421,7 @@ function Pricing() {
         if (!d || typeof d !== 'object' || !d.rates) throw new Error('bad');
         if (!confirm(T('Replace current data with this backup?', 'استبدال البيانات الحالية بهذه النسخة؟'))) return;
         const pick = {};
-        ['rates', 'content', 'company', 'leads', 'quotes', 'orders', 'invoices', 'surveys'].forEach((k) => { if (d[k]) pick[k] = d[k]; });
+        ['rates', 'content', 'company', 'leads', 'quotes', 'orders', 'invoices', 'surveys', 'purchases', 'cash'].forEach((k) => { if (d[k]) pick[k] = d[k]; });
         upd(pick);
       } catch { alert(T('Invalid backup file', 'ملف نسخة احتياطية غير صالح')); }
     });
@@ -599,12 +600,13 @@ export default function Admin() {
   const groups = [
     [T('Overview', 'نظرة عامة'), [['dash', LayoutDashboard, T('Dashboard', 'لوحة المؤشرات')]]],
     [T('Sales', 'المبيعات'), [['crm', Users, 'CRM'], ['quotes', FileText, T('Quotations', 'عروض الأسعار')], ['invoices', Receipt, T('Invoices', 'الفواتير')]]],
+    [T('Finance', 'المالية'), [['accounting', Wallet, T('Accounting', 'المحاسبة')]]],
     [T('Delivery', 'التنفيذ'), [['surveys', Ruler, T('Site Surveys', 'معاينات المواقع')], ['orders', Hammer, T('Production', 'الطلبات والتنفيذ')]]],
     [T('Website', 'الموقع'), [['pricing', Tag, T('Calculator & Pricing', 'الحاسبة والأسعار')], ['content', Images, T('Website Content', 'محتوى الموقع')], ['company', Building2, T('Company & Quote Style', 'الشركة وشكل العروض')]]],
   ];
   const tabs = groups.flatMap(([, list]) => list);
   const current = tabs.find((t) => t[0] === tab) || tabs[0];
-  const View = { dash: Dashboard, pricing: Pricing, content: ContentManager, crm: CRM, surveys: Surveys, quotes: Quotes, orders: Orders, invoices: Invoices, company: CompanySettings }[tab];
+  const View = { dash: Dashboard, accounting: Accounting, pricing: Pricing, content: ContentManager, crm: CRM, surveys: Surveys, quotes: Quotes, orders: Orders, invoices: Invoices, company: CompanySettings }[tab];
   return (
     <div className="min-h-screen md:flex">
       <aside className="md:w-64 shrink-0 bg-ink text-cream no-print md:sticky md:top-0 md:h-screen md:overflow-y-auto">
