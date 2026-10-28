@@ -2,26 +2,527 @@
 @tailwind components;
 @tailwind utilities;
 
-html { scroll-behavior: smooth; }
-body { @apply bg-cream-50 text-ink font-sans antialiased; }
-.dark body { @apply bg-ink text-cream; }
-[dir='rtl'] body, [dir='rtl'] button, [dir='rtl'] input, [dir='rtl'] select, [dir='rtl'] textarea { font-family: 'Cairo', sans-serif; }
+/* ============================================================
+   Design tokens
+   ============================================================ */
+@layer base {
+  :root {
+    --canvas: 251 247 241;
+    --surface: 255 255 255;
+    --surface-2: 246 241 234;
+    --surface-3: 238 230 220;
+    --line: 24 21 18;
+    --fg: 22 20 18;
+    --fg-muted: 92 85 77;
+    --fg-subtle: 116 108 98;
+    --accent: 201 164 92;
+    --accent-strong: 122 90 24;
+    /* Gold that still passes contrast at 10–11px on the cream canvas. */
+    --accent-text: 146 108 36;
+    --ease: cubic-bezier(.22, 1, .36, 1);
+    color-scheme: light;
+  }
 
-@layer components {
-  .glass { @apply bg-white/60 dark:bg-white/5 backdrop-blur-xl border border-black/5 dark:border-white/10 rounded-2xl shadow-sm; }
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-95; }
-  .btn-gold { @apply btn bg-gold text-ink hover:bg-gold-light hover:shadow-lg hover:shadow-gold/20; }
-  .btn-ghost { @apply btn border border-black/10 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10; }
-  .btn-terra { @apply btn bg-terra text-white hover:bg-terra-dark; }
-  .input { @apply w-full rounded-xl border border-black/10 dark:border-white/15 bg-white/70 dark:bg-white/5 px-3 py-2 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/30 transition; }
-  .label { @apply block text-xs font-semibold mb-1 opacity-70; }
-  .card-hover { @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-gold/10; }
-  .badge { @apply inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold; }
+  .dark {
+    --canvas: 12 12 13;
+    --surface: 20 19 20;
+    --surface-2: 26 25 26;
+    --surface-3: 34 32 33;
+    --line: 255 255 255;
+    --fg: 243 237 229;
+    --fg-muted: 168 160 150;
+    --fg-subtle: 130 123 115;
+    --accent: 214 180 116;
+    --accent-strong: 224 196 138;
+    --accent-text: 224 196 138;
+    color-scheme: dark;
+  }
+
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+  body {
+    @apply font-sans antialiased;
+    min-height: 100vh;
+    color: rgb(var(--fg));
+    /* Flat canvas — no ambient glow orbs. Depth comes from hairlines, not blur. */
+    background-color: rgb(var(--canvas));
+  }
+
+  [dir='rtl'] body,
+  [dir='rtl'] button,
+  [dir='rtl'] input,
+  [dir='rtl'] select,
+  [dir='rtl'] textarea { font-family: 'IBM Plex Sans Arabic', 'Tajawal', system-ui, sans-serif; }
+
+  ::selection { background: rgb(var(--accent) / .3); color: rgb(var(--fg)); }
+
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid rgb(var(--accent) / .85);
+    outline-offset: 2px;
+    border-radius: .5rem;
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--line) / .16);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--line) / .3); background-clip: content-box; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
+/* ============================================================
+   Components
+   ============================================================ */
+@layer components {
+  /* ---------- surfaces ---------- */
+  /* Frosted, layered surface — a thin top highlight + soft ambient shadow is what makes a
+     panel read as physical glass rather than a flat rectangle. */
+  .glass {
+    position: relative;
+    border: 1px solid rgb(var(--line) / .08);
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgb(255 255 255 / .80) 0%, rgb(255 255 255 / .52) 100%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    backdrop-filter: blur(22px) saturate(180%);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / .9),
+      inset 0 0 0 1px rgb(255 255 255 / .22),
+      0 1px 1px rgb(24 21 18 / .04),
+      0 22px 44px -30px rgb(24 21 18 / .38);
+    transition: border-color .3s var(--ease), background-color .3s var(--ease),
+      transform .3s var(--ease), box-shadow .3s var(--ease);
+  }
+  .dark .glass {
+    border-color: rgb(255 255 255 / .09);
+    background: linear-gradient(180deg, rgb(255 255 255 / .085) 0%, rgb(255 255 255 / .028) 100%);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / .13),
+      inset 0 0 0 1px rgb(255 255 255 / .04),
+      0 1px 1px rgb(0 0 0 / .5),
+      0 26px 54px -32px rgb(0 0 0 / .95);
+  }
+
+  /* Same frosted recipe, but locked for always-ink bands (Consult, Footer) so it never turns
+     into a white card when the visitor is in light mode. */
+  .glass-ink {
+    position: relative;
+    border: 1px solid rgb(255 255 255 / .10);
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgb(255 255 255 / .085) 0%, rgb(255 255 255 / .022) 100%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    backdrop-filter: blur(22px) saturate(180%);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / .12),
+      inset 0 0 0 1px rgb(255 255 255 / .03),
+      0 24px 50px -32px rgb(0 0 0 / .9);
+    transition: border-color .3s var(--ease), background-color .3s var(--ease),
+      transform .3s var(--ease), box-shadow .3s var(--ease);
+  }
+  .glass-ink:hover {
+    border-color: rgb(255 255 255 / .18);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / .16),
+      inset 0 0 0 1px rgb(255 255 255 / .05),
+      0 30px 62px -30px rgb(0 0 0 / 1);
+  }
+
+  .card-hover:hover {
+    transform: translateY(-5px);
+    border-color: rgb(var(--accent) / .42);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / .95),
+      inset 0 0 0 1px rgb(255 255 255 / .3),
+      0 2px 2px rgb(24 21 18 / .04),
+      0 34px 70px -34px rgb(24 21 18 / .45);
+  }
+  .dark .card-hover:hover {
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / .16),
+      inset 0 0 0 1px rgb(255 255 255 / .06),
+      0 34px 70px -30px rgb(0 0 0 / 1);
+  }
+
+  .divider { height: 1px; background: rgb(var(--line) / .1); }
+
+  /* ---------- buttons ---------- */
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-semibold;
+    transition: transform .18s var(--ease), background-color .18s var(--ease),
+      box-shadow .18s var(--ease), border-color .18s var(--ease), color .18s var(--ease);
+  }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+  .btn-gold {
+    @apply btn;
+    background: linear-gradient(180deg, #DCBC7C 0%, #C9A45C 100%);
+    color: #1a1509;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / .35), 0 12px 28px -18px rgb(201 164 92 / .9);
+  }
+  .btn-gold:hover {
+    background: linear-gradient(180deg, #E6CA8E 0%, #D3AE67 100%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / .45), 0 18px 38px -18px rgb(201 164 92 / 1);
+    transform: translateY(-1px);
+  }
+
+  .btn-ghost {
+    @apply btn;
+    border: 1px solid rgb(var(--line) / .14);
+    background: rgb(var(--surface) / .5);
+    color: inherit;
+  }
+  .btn-ghost:hover {
+    background: rgb(var(--line) / .07);
+    border-color: rgb(var(--line) / .26);
+    transform: translateY(-1px);
+  }
+
+  .btn-terra {
+    @apply btn text-white;
+    background: linear-gradient(180deg, #D97A55 0%, #CB6B47 100%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / .2), 0 14px 30px -18px rgb(203 107 71 / .9);
+  }
+  .btn-terra:hover {
+    background: linear-gradient(180deg, #E08360 0%, #B0522F 100%);
+    transform: translateY(-1px);
+  }
+
+  .btn-sm { @apply px-3 py-1.5 text-xs; }
+  .btn-lg { @apply px-6 py-3 text-[15px]; }
+
+  .icon-btn {
+    @apply inline-grid place-items-center rounded-xl border;
+    width: 2.35rem;
+    height: 2.35rem;
+    border-color: rgb(var(--line) / .14);
+    transition: background-color .18s var(--ease), border-color .18s var(--ease), color .18s var(--ease);
+  }
+  .icon-btn:hover { background: rgb(var(--line) / .07); border-color: rgb(var(--line) / .26); }
+
+  /* ---------- forms ---------- */
+  .input {
+    width: 100%;
+    border-radius: .75rem;
+    border: 1px solid rgb(var(--line) / .14);
+    background: rgb(var(--surface) / .72);
+    padding: .55rem .75rem;
+    font-size: .875rem;
+    line-height: 1.5;
+    color: rgb(var(--fg));
+    transition: border-color .18s var(--ease), box-shadow .18s var(--ease), background-color .18s var(--ease);
+  }
+  .input::placeholder { color: rgb(var(--fg-subtle)); }
+  .input:hover { border-color: rgb(var(--line) / .24); }
+  .input:focus {
+    outline: none;
+    background: rgb(var(--surface));
+    border-color: rgb(var(--accent) / .8);
+    box-shadow: 0 0 0 3px rgb(var(--accent) / .18);
+  }
+  .input:disabled { opacity: .6; cursor: not-allowed; }
+  select.input option { background: rgb(var(--surface)); color: rgb(var(--fg)); }
+  .input[type='number'], .tabular-nums { font-variant-numeric: tabular-nums; }
+
+  .label {
+    @apply mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em];
+    color: rgb(var(--fg-subtle));
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold leading-5;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold;
+    border-color: rgb(var(--line) / .14);
+    color: rgb(var(--fg-muted));
+    transition: all .18s var(--ease);
+  }
+  .chip:hover { border-color: rgb(var(--line) / .3); color: rgb(var(--fg)); background: rgb(var(--line) / .05); }
+  .chip[data-active='true'] {
+    background: rgb(var(--accent));
+    border-color: transparent;
+    color: #1a1509;
+    box-shadow: 0 8px 20px -12px rgb(var(--accent) / .9);
+  }
+
+  .kbd {
+    @apply inline-flex min-w-[1.5rem] items-center justify-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold;
+    border-color: rgb(var(--line) / .16);
+    background: rgb(var(--line) / .05);
+    color: rgb(var(--fg-muted));
+  }
+
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: .75rem;
+    background: rgb(var(--line) / .07);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(var(--line) / .08), transparent);
+    animation: shimmer 1.6s infinite;
+  }
+
+  /* Modals share the glass stack, but stay opaque enough for forms to read on top. */
+  .dialog-panel {
+    border: 1px solid rgb(var(--line) / .1);
+    border-radius: 28px;
+    background: linear-gradient(180deg, rgb(var(--surface) / .96) 0%, rgb(var(--surface) / .92) 100%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    backdrop-filter: blur(28px) saturate(160%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / .55),
+      0 40px 120px -40px rgb(0 0 0 / .7);
+    max-height: 92vh;
+    overflow: auto;
+  }
+  .dark .dialog-panel {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / .10),
+      0 40px 120px -40px rgb(0 0 0 / .95);
+  }
+
+  /* ---------- editorial type ---------- */
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em];
+    color: rgb(var(--accent-text));
+  }
+  .eyebrow::before {
+    content: '';
+    width: 22px;
+    height: 1px;
+    background: currentColor;
+    opacity: .55;
+    flex: none;
+  }
+
+  .headline {
+    @apply font-extrabold leading-[1.12] tracking-tight;
+  }
+
+  /* ---------- editorial display type (public site) ---------- */
+  .display {
+    font-size: clamp(2.6rem, 8vw, 6.6rem);
+    font-weight: 800;
+    line-height: .9;
+    letter-spacing: -.035em;
+  }
+  [lang='ar'] .display {
+    font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif;
+    font-size: clamp(2.1rem, 6.2vw, 4.9rem);
+    line-height: 1.14;
+    letter-spacing: 0;
+  }
+  .display-2 {
+    font-size: clamp(1.85rem, 4.2vw, 3.2rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -.028em;
+  }
+  [lang='ar'] .display-2 {
+    font-size: clamp(1.6rem, 3.4vw, 2.6rem);
+    line-height: 1.25;
+    letter-spacing: 0;
+  }
+  .serif-italic {
+    font-family: 'Instrument Serif', 'Cormorant Garamond', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -.01em;
+  }
+  [lang='ar'] .serif-italic {
+    font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif;
+    font-style: normal;
+    font-weight: 700;
+  }
+
+  /* Public site: pill buttons and a slightly rounder glass than the admin panel. */
+  .editorial :is(.glass, .glass-ink) { border-radius: 26px; }
+  .editorial :is(.btn, .btn-gold, .btn-ghost, .btn-terra) { border-radius: 999px; }
+
+  /* ---------- decorative ---------- */
+  /* Always painted on the dark ink bands (public hero, admin login) — so it stays white-based in both themes. */
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgb(255 255 255 / .055) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(255 255 255 / .055) 1px, transparent 1px);
+    background-size: 64px 64px;
+    -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 28%, #000 35%, transparent 100%);
+    mask-image: radial-gradient(ellipse 75% 65% at 50% 28%, #000 35%, transparent 100%);
+  }
+
+  /* Theme-aware blueprint grid for the public hero (dark lines on cream, light lines on ink). */
+  .grid-lines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgb(var(--line) / .07) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--line) / .07) 1px, transparent 1px);
+    background-size: 72px 72px;
+    -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 0%, #000 25%, transparent 100%);
+    mask-image: radial-gradient(ellipse 85% 75% at 50% 0%, #000 25%, transparent 100%);
+  }
+
+  .marquee-mask {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  }
+
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  .skip-link {
+    position: fixed;
+    top: .75rem;
+    inset-inline-start: .75rem;
+    z-index: 100;
+    transform: translateY(-150%);
+    border-radius: .75rem;
+    background: rgb(var(--accent));
+    color: #1a1509;
+    padding: .5rem 1rem;
+    font-size: .8rem;
+    font-weight: 700;
+    transition: transform .2s var(--ease);
+  }
+  .skip-link:focus { transform: none; }
+
+  /* ---------- reveal on scroll ---------- */
+  .reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity .7s var(--ease), transform .7s var(--ease);
+    will-change: opacity, transform;
+  }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ---------- admin tables (applies to every admin screen) ---------- */
+  .glass table tbody tr { transition: background-color .15s var(--ease); }
+  .glass table tbody tr:hover { background: rgb(var(--accent) / .06); }
+  .glass table thead th {
+    padding-top: .75rem;
+    padding-bottom: .75rem;
+    font-size: .675rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: rgb(var(--fg-subtle));
+    white-space: nowrap;
+    border-bottom: 1px solid rgb(var(--line) / .1);
+  }
+  .glass table td { vertical-align: middle; }
+  /* Sticky header inside a scrollable glass table so long books keep their column labels. */
+  .glass table thead { position: sticky; top: 0; z-index: 1; background: rgb(var(--surface) / .92); backdrop-filter: blur(8px); }
+
+  /* ---------- admin chrome ---------- */
+  /* Segmented control shared by every admin view (accounting books, directory, content tabs). */
+  .seg {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 4px;
+    border: 1px solid rgb(var(--line) / .1);
+    border-radius: 14px;
+    background: rgb(var(--surface-2) / .72);
+    box-shadow: inset 0 1px 2px rgb(var(--line) / .05);
+  }
+  .seg-tab {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: .4rem;
+    padding: .4rem .7rem;
+    border-radius: 10px;
+    font-size: .75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    color: rgb(var(--fg-muted));
+    transition: background-color .18s var(--ease), color .18s var(--ease), box-shadow .18s var(--ease);
+  }
+  .seg-tab:hover { background: rgb(var(--line) / .05); color: rgb(var(--fg)); }
+  .seg-tab[data-active='true'] {
+    background: linear-gradient(180deg, #DCBC7C 0%, #C9A45C 100%);
+    color: #1a1509;
+    font-weight: 700;
+    box-shadow: 0 1px 2px rgb(24 21 18 / .18), 0 10px 22px -14px rgb(201 164 92 / .9);
+  }
+  .seg-tab[data-active='true']:hover { background: linear-gradient(180deg, #E6CA8E 0%, #D3AE67 100%); }
+
+  /* The admin sidebar: a light, paper-like slab driven by the theme tokens (so it flips with
+     dark mode automatically). A soft accent sheen at the top keeps it from reading as a flat
+     rectangle; the hairline edge comes from the shell markup. */
+  .admin-aside {
+    background:
+      radial-gradient(120% 55% at 50% 0%, rgb(var(--accent) / .1) 0%, transparent 62%),
+      linear-gradient(180deg, rgb(var(--surface) / .98) 0%, rgb(var(--surface-2) / .96) 100%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+  }
+
+  /* A hairline under a panel title gives dense admin screens a readable rhythm. */
+  .panel-head { border-bottom: 1px solid rgb(var(--line) / .09); }
+
+  /* KPI / stat card: frosted glass that lifts a little on hover. */
+  .stat-card {
+    position: relative;
+    overflow: hidden;
+    transition: transform .3s var(--ease), border-color .3s var(--ease), box-shadow .3s var(--ease);
+  }
+  .stat-card:hover { transform: translateY(-3px); border-color: rgb(var(--accent) / .38); }
+  .stat-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: rgb(var(--fg-subtle));
+  }
+  .stat-value { font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: -.02em; line-height: 1.05; }
+
+  /* ---------- admin shell nav ---------- */
+  .nav-item {
+    @apply flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm;
+    color: rgb(var(--fg-muted));
+    transition: background-color .18s var(--ease), color .18s var(--ease);
+  }
+  .nav-item:hover { background: rgb(var(--line) / .06); color: rgb(var(--fg)); }
+  .nav-item[data-active='true'] {
+    background: linear-gradient(180deg, #DCBC7C 0%, #C9A45C 100%);
+    color: #1a1509;
+    font-weight: 700;
+    box-shadow: 0 12px 26px -18px rgb(201 164 92 / .9);
+  }
+}
+
+/* ============================================================
+   Print (quotations / invoices)
+   ============================================================ */
 @media print {
   @page { size: A4; margin: 0; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: #fff !important; }
   body * { visibility: hidden !important; }
   #print-area, #print-area * { visibility: visible !important; }
   #print-area { position: absolute !important; top: 0; left: 0; width: 210mm !important; min-height: 297mm !important; background: #fff !important; }

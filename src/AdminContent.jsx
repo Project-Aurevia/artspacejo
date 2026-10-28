@@ -30,8 +30,8 @@ export function ImgPick({ value, on, fit = 'cover', label }) {
   };
   return (
     <div className="flex items-center gap-3">
-      <div className="w-28 h-24 rounded-lg bg-black/10 dark:bg-white/10 overflow-hidden grid place-items-center shrink-0">
-        {value ? <img src={value} alt="" className={`w-full h-full ${fit === 'contain' ? 'object-contain p-2' : 'object-cover'}`} /> : <ImagePlus className="opacity-40" />}
+      <div className="grid h-24 w-28 shrink-0 place-items-center overflow-hidden rounded-xl border border-line/10 bg-surface-2">
+        {value ? <img src={value} alt="" className={`h-full w-full ${fit === 'contain' ? 'object-contain p-2' : 'object-cover'}`} /> : <ImagePlus className="text-subtle" />}
       </div>
       <div className="space-y-1">
         <label className="btn-ghost text-xs cursor-pointer">{busy ? '…' : label}<input type="file" accept="image/*" className="hidden" onChange={pick} /></label>
@@ -131,27 +131,27 @@ export function CatalogEditor({ g, unit, q = '', onAdd }) {
 
   return (
     <div className="glass overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-black/5 dark:border-white/10">
-        <span className="text-[11px] opacity-50">{shown.length}/{entries.length} {T('items', 'عنصر')}</span>
-        <button type="button" className="btn-gold !py-1.5 !px-3 text-xs ms-auto" onClick={add}><Plus size={14} />{T(ADD_LABEL[g][0], ADD_LABEL[g][1])}</button>
+      <div className="flex items-center gap-3 border-b border-line/10 px-4 py-2.5">
+        <span className="text-[11px] tabular-nums text-subtle">{shown.length}/{entries.length} {T('items', 'عنصر')}</span>
+        <button type="button" className="btn-gold ms-auto !px-3 !py-1.5 text-xs" onClick={add}><Plus size={14} />{T(ADD_LABEL[g][0], ADD_LABEL[g][1])}</button>
       </div>
       {shown.length === 0 ? (
-        <p className="text-sm opacity-50 text-center py-8">{entries.length ? T('No item matches this search.', 'لا يوجد عنصر مطابق للبحث.') : T('Empty — add your first item.', 'فارغ — أضف أول عنصر.')}</p>
+        <p className="py-8 text-center text-sm text-subtle">{entries.length ? T('No item matches this search.', 'لا يوجد عنصر مطابق للبحث.') : T('Empty — add your first item.', 'فارغ — أضف أول عنصر.')}</p>
       ) : (
         <div className="divide-y divide-black/5 dark:divide-white/10">
           {shown.map(([k, m]) => {
             const i = entries.findIndex(([key]) => key === k);
             const isOpen = open.has(k);
             return (
-              <div key={k} className={isOpen ? 'bg-black/[0.02] dark:bg-white/[0.03]' : ''}>
+              <div key={k} className={isOpen ? 'bg-gold/[0.045]' : ''}>
                 <div className="flex items-center gap-2 px-2 sm:px-3 py-2">
                   <button type="button" onClick={() => toggle(k)} className="btn-ghost !p-1.5 shrink-0" title={isOpen ? T('Collapse', 'طي') : T('Edit', 'تحرير')}>
                     {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold truncate">{name(m)}</div>
-                    {other(m) && <div className="text-[11px] opacity-40 truncate" dir={lang === 'ar' ? 'ltr' : 'rtl'}>{other(m)}</div>}
-                    {descOf(m) && <div className="text-[11px] opacity-45 truncate">{descOf(m)}</div>}
+                    {other(m) && <div className="truncate text-[11px] text-subtle" dir={lang === 'ar' ? 'ltr' : 'rtl'}>{other(m)}</div>}
+                    {descOf(m) && <div className="truncate text-[11px] text-subtle">{descOf(m)}</div>}
                   </div>
                   <div className="hidden lg:flex items-center gap-1.5 shrink-0">
                     {hasDept && <span className="badge bg-gold/15 text-gold">{deptName(m.dept)}</span>}
@@ -162,7 +162,7 @@ export function CatalogEditor({ g, unit, q = '', onAdd }) {
                     <label className="hidden sm:flex items-center gap-1 shrink-0 text-[10px] cursor-pointer"
                       title={T('Ticked by default on the website calculator', 'محدد افتراضياً في حاسبة الموقع')}>
                       <input type="checkbox" className="accent-[#C9A45C]" checked={!!m.on} onChange={(e) => patch(k, { on: e.target.checked })} />
-                      <span className="opacity-55">{T('default', 'افتراضي')}</span>
+                      <span className="text-[11px] text-subtle">{T('default', 'افتراضي')}</span>
                     </label>
                   )}
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -174,7 +174,7 @@ export function CatalogEditor({ g, unit, q = '', onAdd }) {
                         <option value="m2">{T('per m²', 'للمتر')}</option>
                         <option value="flat">{T('flat', 'مقطوع')}</option>
                       </select>
-                    ) : <span className="text-[10px] opacity-45 w-14 truncate">{unitOf(m)}</span>}
+                    ) : <span className="w-14 truncate text-[10px] text-subtle">{unitOf(m)}</span>}
                   </div>
                   <button type="button" className="text-red-400/70 hover:text-red-400 shrink-0 p-1" onClick={() => remove(k)} title={T('Delete', 'حذف')}><Trash2 size={15} /></button>
                 </div>
@@ -251,13 +251,12 @@ export function ContentManager() {
   return (
     <div>
       {/* sticky control bar so filters stay reachable while editing */}
-      <div className="sticky top-[49px] md:top-[53px] z-10 -mx-4 md:-mx-8 px-4 md:px-8 py-3 mb-4 bg-cream-50/92 dark:bg-ink/92 backdrop-blur border-b border-black/5 dark:border-white/10">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex gap-1 p-1 rounded-xl bg-black/5 dark:bg-white/5">
+      <div className="sticky top-16 z-10 -mx-4 mb-4 border-b border-line/10 bg-canvas/80 px-4 py-3 backdrop-blur-xl md:-mx-8 md:px-8">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="seg">
             {tabs.map(([k, l]) => (
-              <button key={k} type="button" onClick={() => { setTab(k); setCat('all'); setQ(''); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${tab === k ? 'bg-gold text-ink shadow-sm' : 'opacity-70 hover:opacity-100'}`}>
-                {l} <span className="opacity-60">({(content[k] || []).length})</span>
+              <button key={k} type="button" onClick={() => { setTab(k); setCat('all'); setQ(''); }} data-active={tab === k} className="seg-tab">
+                {l} <span className="tabular-nums opacity-60">({(content[k] || []).length})</span>
               </button>
             ))}
           </div>
@@ -269,38 +268,38 @@ export function ContentManager() {
             <input className="input !py-2 ps-9" placeholder={T('Search…', 'بحث…')} value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
           {tab === 'projects' && [{ k: 'all', l: T('All', 'الكل') }, ...CATS.map(([k, en, ar]) => ({ k, l: lang === 'ar' ? ar : en }))].map(({ k, l }) => (
-            <button key={k} type="button" onClick={() => setCat(k)}
-              className={`badge !py-1 !px-2.5 border transition ${cat === k ? 'bg-gold text-ink border-gold' : 'border-black/10 dark:border-white/15'}`}>
-              {l} <span className="opacity-50">({k === 'all' ? all.length : all.filter((x) => x.cat === k).length})</span>
+            <button key={k} type="button" onClick={() => setCat(k)} data-active={cat === k}
+              className="chip px-2.5 py-1 text-[11px]">
+              {l} <span className="tabular-nums opacity-60">({k === 'all' ? all.length : all.filter((x) => x.cat === k).length})</span>
             </button>
           ))}
-          <span className="text-[10px] opacity-40 ms-auto">{list.length}/{all.length}</span>
+          <span className="ms-auto text-[10px] tabular-nums text-subtle">{list.length}/{all.length}</span>
           {list.length > 1 && <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-[11px]" onClick={() => setOpen(allOpen ? new Set() : new Set(list.map((x) => x.id)))}>{allOpen ? T('Collapse all', 'طي الكل') : T('Expand all', 'توسيع الكل')}</button>}
         </div>
       </div>
 
-      <p className="text-xs opacity-60 mb-3">{T('Changes appear instantly on the public website. Click a card to edit it; use ↑ ↓ to reorder.', 'التغييرات تظهر فوراً في الموقع. اضغط البطاقة للتحرير، واستخدم ↑ ↓ لإعادة الترتيب.')}</p>
+      <p className="mb-3 text-xs leading-relaxed text-subtle">{T('Changes appear instantly on the public website. Click a card to edit it; use ↑ ↓ to reorder.', 'التغييرات تظهر فوراً في الموقع. اضغط البطاقة للتحرير، واستخدم ↑ ↓ لإعادة الترتيب.')}</p>
 
-      {all.length === 0 && <div className="glass p-8 text-center text-sm opacity-60">{T('Nothing here yet. Click "Add new".', 'لا يوجد شيء بعد. اضغط "إضافة جديد".')}</div>}
-      {all.length > 0 && list.length === 0 && <div className="glass p-8 text-center text-sm opacity-60">{T('No matching items. Clear the search or filter.', 'لا توجد عناصر مطابقة. امسح البحث أو الفلتر.')}</div>}
+      {all.length === 0 && <div className="glass p-8 text-center text-sm text-subtle">{T('Nothing here yet. Click "Add new".', 'لا يوجد شيء بعد. اضغط "إضافة جديد".')}</div>}
+      {all.length > 0 && list.length === 0 && <div className="glass p-8 text-center text-sm text-subtle">{T('No matching items. Clear the search or filter.', 'لا توجد عناصر مطابقة. امسح البحث أو الفلتر.')}</div>}
 
       {tab === 'projects' && <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3 items-start">
         {list.map((p) => {
           const i = all.indexOf(p);
           const isOpen = open.has(p.id);
           return (
-            <div key={p.id} className={`glass overflow-hidden transition ${isOpen ? 'sm:col-span-2 2xl:col-span-3' : 'hover:ring-1 hover:ring-gold/40'}`}>
+            <div key={p.id} className={`glass overflow-hidden transition duration-300 ${isOpen ? 'sm:col-span-2 2xl:col-span-3' : 'hover:-translate-y-0.5 hover:ring-1 hover:ring-gold/40 hover:shadow-soft'}`}>
               <div className="flex items-center gap-3 p-3">
-                <div className="w-14 h-14 rounded-lg bg-black/10 dark:bg-white/10 overflow-hidden grid place-items-center shrink-0">
-                  {p.image ? <img src={p.image} alt="" className="w-full h-full object-cover" /> : <ImagePlus size={16} className="opacity-40" />}
+                <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl border border-line/10 bg-surface-2">
+                  {p.image ? <img src={p.image} alt="" className="h-full w-full object-cover" /> : <ImagePlus size={16} className="text-subtle" />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="font-semibold text-sm truncate">{txt(p.title) || T('Untitled', 'بدون عنوان')}</div>
-                  <div className="flex items-center gap-2 mt-1"><span className="badge bg-gold/15 text-gold">{catName(p.cat)}</span><span className="text-[10px] opacity-40">#{i + 1}</span>{!p.image && <span className="text-[10px] text-terra">{T('no photo', 'بدون صورة')}</span>}</div>
+                  <div className="truncate text-sm font-semibold">{txt(p.title) || T('Untitled', 'بدون عنوان')}</div>
+                  <div className="mt-1 flex items-center gap-2"><span className="badge bg-gold/15 text-gold">{catName(p.cat)}</span><span className="text-[10px] tabular-nums text-subtle">#{i + 1}</span>{!p.image && <span className="text-[10px] text-terra">{T('no photo', 'بدون صورة')}</span>}</div>
                 </div>
                 <button type="button" onClick={() => toggle(p.id)} className="btn-ghost !p-2 shrink-0" title={isOpen ? T('Collapse', 'طي') : T('Edit', 'تحرير')}>{isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</button>
               </div>
-              {isOpen && <div className="px-3 pb-3 pt-3 border-t border-black/5 dark:border-white/10 space-y-3">
+              {isOpen && <div className="px-3 pb-3 pt-3 border-t border-line/10 space-y-3">
                 <div className="flex gap-4 flex-wrap md:flex-nowrap items-start">
                   <ImgPick value={p.image} on={(image) => edit('projects', p.id, { image })} label={T('Upload photo', 'رفع صورة')} />
                   <div className="flex-1 min-w-[240px] space-y-3">
@@ -335,7 +334,7 @@ export function ContentManager() {
                 </div>
                 <button type="button" onClick={() => toggle(t.id)} className="btn-ghost !p-2 shrink-0">{isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</button>
               </div>
-              {isOpen && <div className="px-3 pb-3 pt-3 border-t border-black/5 dark:border-white/10 space-y-3">
+              {isOpen && <div className="px-3 pb-3 pt-3 border-t border-line/10 space-y-3">
                 <Pair label={T('Client name', 'اسم العميل')} v={t.name} on={(name) => edit('testimonials', t.id, { name })} />
                 <Pair label={T('Role / company', 'المسمى / الشركة')} v={t.role} on={(role) => edit('testimonials', t.id, { role })} />
                 <Pair area label={T('Testimonial', 'الشهادة')} v={t.quote} on={(quote) => edit('testimonials', t.id, { quote })} />

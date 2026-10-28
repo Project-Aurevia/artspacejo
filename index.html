@@ -6,7 +6,9 @@
     <title>مساحة الفن | Art Space — آرمات، مطبوعات، سوشيال ميديا وتسويق في الأردن</title>
     <meta name="description" content="مساحة الفن: وكالة دعاية وإعلان متكاملة في عمّان — آرمات وواجهات، تجهيز معارض وبوثات، مطبوعات تجارية، إدارة سوشيال ميديا واستشارات تسويقية مع تسعير فوري أونلاين." />
     <meta name="keywords" content="آرمات, لوحات إعلانية, بوث معارض, مطبوعات, سوشيال ميديا, تسويق, عمان, الأردن, signage, exhibition booth, printing, Amman, Jordan" />
-    <meta name="theme-color" content="#161616" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#161616" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#FBF7F1" media="(prefers-color-scheme: light)" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
@@ -29,7 +31,19 @@
     <!--SEO_JSONLD-->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <script>
+      // Apply the stored theme + language before first paint so there is no flash of the wrong palette.
+      // Mirrors the one-time migration in store.jsx: pre-v2 state defaults to the light editorial palette.
+      try {
+        var saved = JSON.parse(localStorage.getItem('artspace_jo_v1') || '{}');
+        var staleTheme = (saved.themeV || 1) < 2;
+        document.documentElement.classList.toggle('dark', staleTheme ? false : saved.dark === true);
+        var lang = saved.lang === 'en' ? 'en' : 'ar';
+        document.documentElement.lang = lang;
+        document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+      } catch (e) { /* first visit or storage blocked — defaults already on <html> */ }
+    </script>
   </head>
   <body>
     <noscript>Art Space | مساحة الفن — Signage, printing, social media & marketing in Amman, Jordan. Please enable JavaScript.</noscript>

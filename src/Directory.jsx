@@ -195,7 +195,7 @@ export function EntityPicker({ kind = 'customer', value = '', onPick, label, nam
       {label && <label className="label">{label}</label>}
 
       {sel && !editing ? (
-        <div className="flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/15 px-3 py-2">
+        <div className="flex items-center gap-2 rounded-xl border border-line/15 px-3 py-2">
           <Building2 size={15} className="text-gold shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold truncate">{sel.name}</div>
@@ -219,7 +219,7 @@ export function EntityPicker({ kind = 'customer', value = '', onPick, label, nam
             />
           </div>
 
-          <div className="mt-2 rounded-xl border border-black/10 dark:border-white/15 divide-y divide-black/5 dark:divide-white/10 max-h-60 overflow-auto">
+          <div className="mt-2 rounded-xl border border-line/15 divide-y divide-black/5 dark:divide-white/10 max-h-60 overflow-auto">
             {rows.map((e) => (
               <button type="button" key={e.id} onClick={() => pick(e)} className="w-full flex items-center gap-2 p-2.5 text-start hover:bg-gold/10">
                 <Building2 size={14} className="opacity-40 shrink-0" />
@@ -330,35 +330,34 @@ export default function Directory() {
 
   return (
     <div className="space-y-4">
-      <div className="grid sm:grid-cols-3 gap-3">
-        <div className="glass p-4">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide opacity-60"><Icon size={14} className="text-gold" />{T(meta.pluralEn, meta.pluralAr)}</div>
-          <div className="text-2xl font-extrabold mt-1.5 tabular-nums text-gold">{list.length}</div>
-          <div className="text-[11px] opacity-50 mt-1.5">{T('Companies on file', 'شركات مسجّلة')}</div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="glass stat-card p-5">
+          <div className="flex items-center gap-2"><Icon size={14} className="shrink-0 text-gold" /><span className="stat-label truncate">{T(meta.pluralEn, meta.pluralAr)}</span></div>
+          <div className="stat-value mt-2.5 text-[26px] text-gold">{list.length}</div>
+          <div className="mt-1.5 text-[11px] leading-snug text-subtle">{T('Companies on file', 'شركات مسجّلة')}</div>
         </div>
-        <div className="glass p-4">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide opacity-60"><Phone size={14} className="text-emerald-500" />{T('With a contact', 'بجهة اتصال')}</div>
-          <div className="text-2xl font-extrabold mt-1.5 tabular-nums text-emerald-500">{withContact}</div>
-          <div className="text-[11px] opacity-50 mt-1.5">{T('Ready for documents', 'جاهزة للمستندات')}</div>
+        <div className="glass stat-card p-5">
+          <div className="flex items-center gap-2"><Phone size={14} className="shrink-0 text-emerald-500" /><span className="stat-label truncate">{T('With a contact', 'بجهة اتصال')}</span></div>
+          <div className="stat-value mt-2.5 text-[26px] text-emerald-500">{withContact}</div>
+          <div className="mt-1.5 text-[11px] leading-snug text-subtle">{T('Ready for documents', 'جاهزة للمستندات')}</div>
         </div>
-        <div className="glass p-4">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide opacity-60"><AlertTriangle size={14} className={clashes.size ? 'text-amber-500' : 'text-emerald-500'} />{T('Possible duplicates', 'تكرارات محتملة')}</div>
-          <div className={`text-2xl font-extrabold mt-1.5 tabular-nums ${clashes.size ? 'text-amber-500' : 'text-emerald-500'}`}>{clashes.size}</div>
-          <div className="text-[11px] opacity-50 mt-1.5">{T('Shared phone or e-mail', 'هاتف أو بريد مشترك')}</div>
+        <div className="glass stat-card p-5">
+          <div className="flex items-center gap-2"><AlertTriangle size={14} className={`shrink-0 ${clashes.size ? 'text-amber-500' : 'text-emerald-500'}`} /><span className="stat-label truncate">{T('Possible duplicates', 'تكرارات محتملة')}</span></div>
+          <div className={`stat-value mt-2.5 text-[26px] ${clashes.size ? 'text-amber-500' : 'text-emerald-500'}`}>{clashes.size}</div>
+          <div className="mt-1.5 text-[11px] leading-snug text-subtle">{T('Shared phone or e-mail', 'هاتف أو بريد مشترك')}</div>
         </div>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex gap-1 p-1 rounded-xl bg-black/5 dark:bg-white/5">
+        <div className="seg">
           {[['customer', Users, 'Customers', 'العملاء', (customers || []).length], ['supplier', Truck, 'Suppliers', 'الموردون', (suppliers || []).length]].map(([k, I, en, ar, n]) => (
-            <button key={k} type="button" onClick={() => { setKind(k); setQ(''); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${kind === k ? 'bg-gold text-ink shadow-sm' : 'opacity-70 hover:opacity-100'}`}>
-              <I size={13} />{T(en, ar)} <span className="opacity-60">({n})</span>
+            <button key={k} type="button" onClick={() => { setKind(k); setQ(''); }} data-active={kind === k} className="seg-tab">
+              <I size={13} />{T(en, ar)} <span className="tabular-nums opacity-60">({n})</span>
             </button>
           ))}
         </div>
-        <div className="relative flex-1 min-w-[170px] max-w-[300px]">
-          <Search size={14} className="absolute start-3 top-1/2 -translate-y-1/2 opacity-40" />
+        <div className="relative min-w-[170px] max-w-[300px] flex-1">
+          <Search size={14} className="absolute start-3 top-1/2 -translate-y-1/2 text-subtle" />
           <input className="input !py-2 ps-9" placeholder={`${T('Search', 'بحث')} ${T(meta.pluralEn, meta.pluralAr)}`} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <button type="button" className="btn-ghost !py-2 !px-3 text-xs" onClick={exportCsv}><Download size={14} />{T('CSV', 'CSV')}</button>
@@ -374,26 +373,26 @@ export default function Directory() {
 
       <div className="glass overflow-auto">
         <table className="w-full text-sm">
-          <thead className="text-[11px] opacity-55">
-            <tr>{[T('Company', 'الشركة'), T('Contact', 'جهة الاتصال'), T('Phone', 'الهاتف'), T('E-mail', 'البريد'), T('Tax no.', 'الرقم الضريبي'), ''].map((h, i) => <th key={i} className="p-2.5 text-start font-semibold whitespace-nowrap">{h}</th>)}</tr>
+          <thead>
+            <tr>{[T('Company', 'الشركة'), T('Contact', 'جهة الاتصال'), T('Phone', 'الهاتف'), T('E-mail', 'البريد'), T('Tax no.', 'الرقم الضريبي'), ''].map((h, i) => <th key={i} className="p-3 text-start whitespace-nowrap">{h}</th>)}</tr>
           </thead>
           <tbody>
             {rows.map((e) => (
-              <tr key={e.id} className="border-t border-black/5 dark:border-white/10 hover:bg-gold/5">
+              <tr key={e.id} className="border-t border-line/10 hover:bg-gold/5">
                 <td className="p-2.5 min-w-[160px]">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-semibold truncate">{e.name}</span>
-                    {clashes.has(e.id) && <AlertTriangle size={12} className="text-amber-500 shrink-0" title={T('Shares a phone or e-mail with another record', 'يشترك في هاتف أو بريد مع سجل آخر')} />}
+                    <span className="truncate font-semibold">{e.name}</span>
+                    {clashes.has(e.id) && <AlertTriangle size={12} className="shrink-0 text-amber-500" title={T('Shares a phone or e-mail with another record', 'يشترك في هاتف أو بريد مع سجل آخر')} />}
                   </div>
-                  {e.address && <div className="text-[11px] opacity-50 truncate max-w-[220px]">{e.address}</div>}
+                  {e.address && <div className="mt-0.5 max-w-[220px] truncate text-[11px] text-subtle">{e.address}</div>}
                 </td>
-                <td className="p-2.5">
-                  {contactLine(e) ? <div>{contactLine(e)}</div> : <span className="text-[11px] opacity-40">{T('No contact yet', 'لا جهة اتصال')}</span>}
+                <td className="p-3">
+                  {contactLine(e) ? <div>{contactLine(e)}</div> : <span className="text-[11px] text-subtle">{T('No contact yet', 'لا جهة اتصال')}</span>}
                 </td>
-                <td className="p-2.5 text-xs tabular-nums" dir="ltr">{phoneOf(e) || '—'}</td>
-                <td className="p-2.5 text-xs" dir="ltr">{emailOf(e) || '—'}</td>
-                <td className="p-2.5 text-xs opacity-60" dir="ltr">{e.tax || '—'}</td>
-                <td className="p-2.5 whitespace-nowrap text-end">
+                <td className="p-3 text-xs tabular-nums text-muted" dir="ltr">{phoneOf(e) || '—'}</td>
+                <td className="p-3 text-xs text-muted" dir="ltr">{emailOf(e) || '—'}</td>
+                <td className="p-3 text-xs text-subtle" dir="ltr">{e.tax || '—'}</td>
+                <td className="whitespace-nowrap p-3 text-end">
                   <button type="button" className="text-gold me-2" title={T('Edit', 'تحرير')} onClick={() => setEdit(e)}><Pencil size={14} /></button>
                   <button type="button" className="text-red-400/70 hover:text-red-400" title={T('Delete', 'حذف')} onClick={() => remove(e)}><Trash2 size={14} /></button>
                 </td>
@@ -401,7 +400,7 @@ export default function Directory() {
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan="6" className="p-8 text-center opacity-50">
+                <td colSpan="6" className="p-8 text-center text-sm text-subtle">
                   {q ? T('Nothing matches that search.', 'لا نتائج لهذا البحث.') : T(`No ${meta.pluralEn.toLowerCase()} yet — add the first company.`, `لا يوجد ${meta.pluralAr} بعد — أضف أول شركة.`)}
                 </td>
               </tr>
@@ -410,7 +409,7 @@ export default function Directory() {
         </table>
       </div>
 
-      <p className="text-[11px] opacity-45 flex items-center gap-1.5">
+      <p className="flex items-center gap-1.5 text-[11px] leading-relaxed text-subtle">
         <Mail size={12} />
         {T('A company is the account; the Contact tab holds the person we actually talk to. Phone and e-mail are checked against both books to stop duplicates.',
           'الشركة هي الحساب، وتبويب جهة الاتصال يحمل الشخص الذي نتعامل معه. يُفحص الهاتف والبريد في الدفترين لمنع التكرار.')}

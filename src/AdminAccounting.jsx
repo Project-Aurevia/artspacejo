@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Wallet, Receipt, ShoppingCart, Banknote, Plus, Trash2, Pencil, Download, Search, Check,
-  AlertTriangle, ArrowRight, ExternalLink, CalendarDays, BookUser,
+  AlertTriangle, ArrowRight, ExternalLink, CalendarDays, BookUser, FileText,
 } from 'lucide-react';
 import { useApp, uid } from './store.jsx';
-import { Modal, Field } from './ui.jsx';
+import { Modal, Field, EmptyState } from './ui.jsx';
 import { todayStr, addDays, safeTotals } from './adminStats.js';
 import {
   PUR_CATS, CASH_CATS, catName, nextNo, purchaseView, cashView, carryFrom, accountingSummary, toCsv,
@@ -27,10 +27,10 @@ const BADGE = {
 /* ---------- shared building blocks (module level: keeps focus while typing) ---------- */
 function Tip({ icon: Icon, label, value, hint, tone = 'gold' }) {
   return (
-    <div className="glass p-4">
-      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide opacity-60"><Icon size={14} className={TONE[tone]} />{label}</div>
-      <div className={`text-2xl leading-tight font-extrabold mt-1.5 tabular-nums ${TONE[tone]}`}>{value}</div>
-      {hint && <div className="text-[11px] opacity-50 mt-1.5 leading-snug">{hint}</div>}
+    <div className="glass stat-card p-4">
+      <div className="flex items-center gap-2"><Icon size={14} className={`shrink-0 ${TONE[tone]}`} /><span className="stat-label truncate">{label}</span></div>
+      <div className={`stat-value mt-2 text-[24px] ${TONE[tone]}`}>{value}</div>
+      {hint && <div className="mt-1.5 text-[11px] leading-snug text-subtle">{hint}</div>}
     </div>
   );
 }
@@ -38,10 +38,10 @@ function Tip({ icon: Icon, label, value, hint, tone = 'gold' }) {
 function Panel({ title, sub, action, children, className = '' }) {
   return (
     <section className={`glass p-5 ${className}`}>
-      <div className="flex items-start gap-3 mb-3">
+      <div className="panel-head mb-3 flex items-start gap-3 pb-3">
         <div className="min-w-0">
-          <h3 className="font-bold text-sm leading-tight">{title}</h3>
-          {sub && <p className="text-[11px] opacity-50 mt-1">{sub}</p>}
+          <h3 className="text-[13px] font-bold leading-tight tracking-tight">{title}</h3>
+          {sub && <p className="mt-1 text-[11px] leading-relaxed text-subtle">{sub}</p>}
         </div>
         {action && <div className="ms-auto shrink-0">{action}</div>}
       </div>
@@ -53,7 +53,7 @@ function Panel({ title, sub, action, children, className = '' }) {
 function Line({ label, value, strong, tone }) {
   return (
     <div className={`flex items-center justify-between gap-3 py-1 text-sm ${strong ? 'font-bold' : ''}`}>
-      <span className={strong ? '' : 'opacity-60'}>{label}</span>
+      <span className={strong ? '' : 'text-muted'}>{label}</span>
       <span className={`tabular-nums ${tone || ''}`}>{value}</span>
     </div>
   );
@@ -61,7 +61,7 @@ function Line({ label, value, strong, tone }) {
 
 function Bar({ pct, className = 'bg-gold' }) {
   const w = Math.max(0, Math.min(100, Number(pct) || 0));
-  return <div className="h-1.5 w-full rounded-full bg-black/10 dark:bg-white/10 overflow-hidden"><div className={`h-full rounded-full ${className}`} style={{ width: `${w}%` }} /></div>;
+  return <div className="h-1.5 w-full overflow-hidden rounded-full bg-line/10"><div className={`h-full rounded-full ${className}`} style={{ width: `${w}%` }} /></div>;
 }
 
 /** Amount input that commits on blur/Enter so typing "12." never rewrites the caret. */
@@ -126,7 +126,7 @@ function Overview({ s, onTab, onNav }) {
           <Line label={T('Sales (net of VAT)', 'المبيعات بدون ضريبة')} value={money(s.salesNet)} />
           <Line label={T('Purchases (net of VAT)', 'المشتريات بدون ضريبة')} value={`− ${money(s.purchasesNet)}`} tone="text-terra" />
           <Line label={T('Gross profit', 'الربح الإجمالي')} value={money(s.grossProfit)} strong />
-          <div className="h-px bg-black/10 dark:bg-white/10 my-1.5" />
+          <div className="my-1.5 h-px bg-line/10" />
           <Line label={T('Petty cash expenses', 'مصروفات نقد المصروف')} value={`− ${money(s.petty)}`} tone="text-terra" />
           <Line label={T('Net profit', 'صافي الربح')} value={money(s.netProfit)} strong tone={s.netProfit >= 0 ? 'text-emerald-500' : 'text-red-400'} />
           <div className="mt-3"><Bar pct={s.margin} className={s.netProfit >= 0 ? 'bg-emerald-500' : 'bg-red-500'} /></div>
@@ -139,9 +139,9 @@ function Overview({ s, onTab, onNav }) {
         >
           <Line label={T('Output VAT (sales)', 'ضريبة المبيعات')} value={money(s.salesVat)} tone="text-emerald-500" />
           <Line label={T('Input VAT (purchases)', 'ضريبة المشتريات')} value={`− ${money(s.purchasesVat)}`} tone="text-terra" />
-          <div className="h-px bg-black/10 dark:bg-white/10 my-1.5" />
+          <div className="my-1.5 h-px bg-line/10" />
           <Line label={T('Payable to the tax office', 'المستحق للضريبة')} value={money(s.vatDue)} strong tone={s.vatDue >= 0 ? 'text-gold' : 'text-emerald-500'} />
-          <p className="text-[11px] opacity-45 mt-3 leading-snug">
+          <p className="mt-3 text-[11px] leading-snug text-subtle">
             {T('A negative amount means you paid more input VAT than you charged — it carries forward.', 'القيمة السالبة تعني أن ضريبة مشترياتك أكبر من مبيعاتك — تُرحّل للفترة القادمة.')}
           </p>
         </Panel>
@@ -151,7 +151,7 @@ function Overview({ s, onTab, onNav }) {
         <Panel
           title={T('Last 6 months', 'آخر ٦ أشهر')}
           sub={T('Sales · purchases · petty cash, per month', 'المبيعات · المشتريات · نقد المصروف لكل شهر')}
-          action={<div className="flex items-center gap-3 text-[10px] opacity-60">
+          action={<div className="flex items-center gap-3 text-[10px] text-subtle">
             <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-gold inline-block" />{T('Sales', 'مبيعات')}</span>
             <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-terra inline-block" />{T('Bills', 'مشتريات')}</span>
             <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-sky-400 inline-block" />{T('Cash', 'نقد')}</span>
@@ -160,11 +160,11 @@ function Overview({ s, onTab, onNav }) {
           <div className="space-y-2.5">
             {s.byMonth.map((m) => (
               <div key={m.key} className="grid grid-cols-[46px_1fr] gap-3 items-center">
-                <span className="text-[10px] opacity-50 tabular-nums">{m.label}</span>
+                <span className="text-[10px] tabular-nums text-subtle">{m.label}</span>
                 <div className="space-y-1">
-                  <div className="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-gold" style={{ width: `${(m.sales / max) * 100}%` }} title={money(m.sales)} /></div>
-                  <div className="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-terra" style={{ width: `${(m.purchases / max) * 100}%` }} title={money(m.purchases)} /></div>
-                  <div className="h-1 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-sky-400" style={{ width: `${(m.petty / max) * 100}%` }} title={money(m.petty)} /></div>
+                  <div className="h-2 overflow-hidden rounded-full bg-line/10"><div className="h-full rounded-full bg-gold" style={{ width: `${(m.sales / max) * 100}%` }} title={money(m.sales)} /></div>
+                  <div className="h-2 overflow-hidden rounded-full bg-line/10"><div className="h-full rounded-full bg-terra" style={{ width: `${(m.purchases / max) * 100}%` }} title={money(m.purchases)} /></div>
+                  <div className="h-1 overflow-hidden rounded-full bg-line/10"><div className="h-full rounded-full bg-sky-400" style={{ width: `${(m.petty / max) * 100}%` }} title={money(m.petty)} /></div>
                 </div>
               </div>
             ))}
@@ -177,12 +177,12 @@ function Overview({ s, onTab, onNav }) {
               <div className="space-y-2">
                 {s.byCat.map((c) => (
                   <div key={c.key}>
-                    <div className="flex justify-between text-[11px] mb-1"><span className="opacity-70">{T(c.en, c.ar)}</span><span className="tabular-nums">{money(c.value)}</span></div>
+                    <div className="mb-1 flex justify-between text-[11px]"><span className="text-muted">{T(c.en, c.ar)}</span><span className="font-semibold tabular-nums">{money(c.value)}</span></div>
                     <Bar pct={s.purchasesGross ? (c.value / s.purchasesGross) * 100 : 0} className="bg-sky-400" />
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm opacity-50 py-4 text-center">{T('No supplier bills yet — add one in the Purchases tab.', 'لا توجد فواتير موردين بعد — أضف واحدة من تبويب المشتريات.')}</p>}
+            ) : <p className="py-4 text-center text-sm text-subtle">{T('No supplier bills yet — add one in the Purchases tab.', 'لا توجد فواتير موردين بعد — أضف واحدة من تبويب المشتريات.')}</p>}
           </Panel>
 
           <Panel
@@ -203,15 +203,15 @@ function Overview({ s, onTab, onNav }) {
               <div className="space-y-2">
                 {s.byPayer.map((p) => (
                   <div key={p.id}>
-                    <div className="flex justify-between text-[11px] mb-1">
-                      <span className="opacity-70">{T(p.en, p.ar)}</span>
-                      <span className="tabular-nums">{money(p.value)}</span>
+                    <div className="mb-1 flex justify-between text-[11px]">
+                      <span className="text-muted">{T(p.en, p.ar)}</span>
+                      <span className="font-semibold tabular-nums">{money(p.value)}</span>
                     </div>
                     <Bar pct={(p.value / Math.max(1, s.paidByCompany + s.petty)) * 100} className={p.id === 'cash' ? 'bg-terra' : isPartner(p.id) ? 'bg-amber-500' : 'bg-sky-400'} />
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm opacity-50 py-4 text-center">{T('Nothing paid yet.', 'لا مدفوعات بعد.')}</p>}
+            ) : <p className="py-4 text-center text-sm text-subtle">{T('Nothing paid yet.', 'لا مدفوعات بعد.')}</p>}
             {s.partnerOut > 0 && (
               <p className="text-[11px] mt-3 leading-snug text-amber-500">
                 {T(`Partners funded ${money(s.partnerOut)} — this is owed back to them.`, `مول الشركاء ${money(s.partnerOut)} — يُرد لهم.`)}
@@ -221,7 +221,7 @@ function Overview({ s, onTab, onNav }) {
         </div>
       </div>
 
-      <p className="text-[11px] opacity-45 leading-relaxed">
+      <p className="text-[11px] leading-relaxed text-subtle">
         {T(
           'How this stays balanced: sales come from the Invoices tab, supplier bills from Purchases, and everyday cash from Pocket money. Petty cash is treated as an operating expense, so it is subtracted after gross profit.',
           'كيف تتوازن الأرقام: المبيعات من تبويب الفواتير، وفواتير الموردين من المشتريات، والمصروف اليومي من نقد المصروف. يُحسب نقد المصروف كمصروف تشغيلي ويُخصم بعد الربح الإجمالي.',
@@ -245,6 +245,10 @@ function Sales({ s, onNav }) {
   const hit = (no, name) => !q || `${no} ${name}`.toLowerCase().includes(q.toLowerCase());
   const invRows = s.invoices.filter((r) => hit(r.inv.no, client(r.inv.clientId)));
   const qRows = quotes.filter((x) => hit(x.no, client(x.clientId)));
+  const invTotals = invRows.reduce(
+    (a, r) => ({ total: a.total + r.total, paid: a.paid + r.paid, balance: a.balance + r.balance }),
+    { total: 0, paid: 0, balance: 0 },
+  );
 
   return (
     <div className="space-y-4">
@@ -266,28 +270,49 @@ function Sales({ s, onNav }) {
           <button type="button" className="btn-ghost !py-1.5 !px-3 text-xs" onClick={() => onNav('invoices')}><ExternalLink size={13} />{T('Manage invoices', 'إدارة الفواتير')}</button>
         </div>}
       >
-        <div className="overflow-auto -mx-1">
+        <div className="-mx-1 overflow-auto">
           <table className="w-full text-sm">
-            <thead className="text-[11px] opacity-55">
-              <tr>{['#', T('Client', 'العميل'), T('Date', 'التاريخ'), T('Total', 'الإجمالي'), T('Paid', 'المدفوع'), T('Balance', 'المتبقي'), T('Status', 'الحالة')].map((h) => <th key={h} className="p-2 text-start font-semibold whitespace-nowrap">{h}</th>)}</tr>
+            <thead>
+              <tr>
+                {['#', T('Client', 'العميل'), T('Date', 'التاريخ')].map((h) => <th key={h} className="whitespace-nowrap p-3 text-start">{h}</th>)}
+                {[T('Total', 'الإجمالي'), T('Paid', 'المدفوع'), T('Balance', 'المتبقي')].map((h) => <th key={h} className="whitespace-nowrap p-3 text-end">{h}</th>)}
+                <th className="whitespace-nowrap p-3 text-start">{T('Status', 'الحالة')}</th>
+              </tr>
             </thead>
             <tbody>
               {invRows.map((r) => {
                 const st = statusOf(r);
                 return (
-                  <tr key={r.inv.id} className="border-t border-black/5 dark:border-white/10">
-                    <td className="p-2 font-semibold whitespace-nowrap">{r.inv.no}</td>
-                    <td className="p-2">{client(r.inv.clientId)}</td>
-                    <td className="p-2 text-xs opacity-60 whitespace-nowrap" dir="ltr">{r.inv.date}</td>
-                    <td className="p-2 tabular-nums">{money(r.total)}</td>
-                    <td className="p-2 tabular-nums text-emerald-500">{money(r.paid)}</td>
-                    <td className={`p-2 tabular-nums font-bold ${r.balance > 0 ? 'text-terra' : 'opacity-40'}`}>{money(r.balance)}</td>
-                    <td className="p-2"><span className={`badge ${BADGE[st]}`}>{T({ paid: 'Paid', partial: 'Partial', open: 'Open', overdue: 'Overdue' }[st], { paid: 'مدفوعة', partial: 'جزئي', open: 'مفتوحة', overdue: 'متأخرة' }[st])}</span></td>
+                  <tr key={r.inv.id} className="border-t border-line/10 transition-colors duration-200 hover:bg-gold/5">
+                    <td className="whitespace-nowrap p-3 font-semibold">{r.inv.no}</td>
+                    <td className="min-w-[140px] p-3">{client(r.inv.clientId)}</td>
+                    <td className="whitespace-nowrap p-3 text-xs tabular-nums text-subtle" dir="ltr">{r.inv.date}</td>
+                    <td className="p-3 text-end tabular-nums">{money(r.total)}</td>
+                    <td className="p-3 text-end tabular-nums text-emerald-500">{money(r.paid)}</td>
+                    <td className={`p-3 text-end font-bold tabular-nums ${r.balance > 0 ? 'text-terra' : 'text-subtle'}`}>{money(r.balance)}</td>
+                    <td className="p-3"><span className={`badge ${BADGE[st]}`}>{T({ paid: 'Paid', partial: 'Partial', open: 'Open', overdue: 'Overdue' }[st], { paid: 'مدفوعة', partial: 'جزئي', open: 'مفتوحة', overdue: 'متأخرة' }[st])}</span></td>
                   </tr>
                 );
               })}
-              {!invRows.length && <tr><td colSpan="7" className="p-6 text-center opacity-50 text-sm">{T('No invoices match.', 'لا توجد فواتير مطابقة.')}</td></tr>}
+              {!invRows.length && (
+                <tr>
+                  <td colSpan="7" className="p-1">
+                    <EmptyState icon={FileText} title={T('No invoices match', 'لا توجد فواتير مطابقة')} sub={T('Try another number or clear the search.', 'جرّب رقماً آخر أو امسح البحث.')} />
+                  </td>
+                </tr>
+              )}
             </tbody>
+            {invRows.length > 0 && (
+              <tfoot>
+                <tr className="border-t border-line/20 bg-line/[0.03]">
+                  <td className="p-3 text-[10px] font-bold uppercase tracking-[0.1em] text-subtle" colSpan="3">{T('Totals', 'الإجمالي')}</td>
+                  <td className="p-3 text-end font-bold tabular-nums">{money(invTotals.total)}</td>
+                  <td className="p-3 text-end font-bold tabular-nums text-emerald-500">{money(invTotals.paid)}</td>
+                  <td className="p-3 text-end font-bold tabular-nums text-terra">{money(invTotals.balance)}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </Panel>
@@ -297,23 +322,33 @@ function Sales({ s, onNav }) {
         sub={T('Not revenue yet — they only become sales when invoiced.', 'ليست إيراداً بعد — تصبح مبيعات عند الفوترة.')}
         action={<button type="button" className="btn-ghost !py-1.5 !px-3 text-xs" onClick={() => onNav('quotes')}><ExternalLink size={13} />{T('Manage quotes', 'إدارة العروض')}</button>}
       >
-        <div className="overflow-auto -mx-1">
+        <div className="-mx-1 overflow-auto">
           <table className="w-full text-sm">
-            <thead className="text-[11px] opacity-55">
-              <tr>{['#', T('Client', 'العميل'), T('Date', 'التاريخ'), T('Total', 'الإجمالي'), T('Status', 'الحالة'), ''].map((h, i) => <th key={i} className="p-2 text-start font-semibold whitespace-nowrap">{h}</th>)}</tr>
+            <thead>
+              <tr>
+                {['#', T('Client', 'العميل'), T('Date', 'التاريخ')].map((h) => <th key={h} className="whitespace-nowrap p-3 text-start">{h}</th>)}
+                <th className="whitespace-nowrap p-3 text-end">{T('Total', 'الإجمالي')}</th>
+                {[T('Status', 'الحالة'), ''].map((h, i) => <th key={i} className="whitespace-nowrap p-3 text-start">{h}</th>)}
+              </tr>
             </thead>
             <tbody>
               {qRows.slice(0, 40).map((x) => (
-                <tr key={x.id} className="border-t border-black/5 dark:border-white/10">
-                  <td className="p-2 font-semibold whitespace-nowrap">{x.no}</td>
-                  <td className="p-2">{client(x.clientId)}</td>
-                  <td className="p-2 text-xs opacity-60 whitespace-nowrap" dir="ltr">{x.date}</td>
-                  <td className="p-2 tabular-nums">{money(safeTotals(x, rates.vat).total)}</td>
-                  <td className="p-2"><span className={`badge ${BADGE[x.status] || 'bg-zinc-500/20'}`}>{T({ draft: 'Draft', sent: 'Sent', approved: 'Approved', rejected: 'Rejected' }[x.status] || x.status, { draft: 'مسودة', sent: 'مرسل', approved: 'معتمد', rejected: 'مرفوض' }[x.status] || x.status)}</span></td>
-                  <td className="p-2 text-xs opacity-50">{x.converted ? T('Invoiced', 'مفوتر') : ''}</td>
+                <tr key={x.id} className="border-t border-line/10 transition-colors duration-200 hover:bg-gold/5">
+                  <td className="whitespace-nowrap p-3 font-semibold">{x.no}</td>
+                  <td className="min-w-[140px] p-3">{client(x.clientId)}</td>
+                  <td className="whitespace-nowrap p-3 text-xs tabular-nums text-subtle" dir="ltr">{x.date}</td>
+                  <td className="p-3 text-end tabular-nums">{money(safeTotals(x, rates.vat).total)}</td>
+                  <td className="p-3"><span className={`badge ${BADGE[x.status] || 'bg-zinc-500/20'}`}>{T({ draft: 'Draft', sent: 'Sent', approved: 'Approved', rejected: 'Rejected' }[x.status] || x.status, { draft: 'مسودة', sent: 'مرسل', approved: 'معتمد', rejected: 'مرفوض' }[x.status] || x.status)}</span></td>
+                  <td className="p-3 text-xs text-subtle">{x.converted ? <span className="inline-flex items-center gap-1 text-emerald-500"><Check size={12} />{T('Invoiced', 'مفوتر')}</span> : ''}</td>
                 </tr>
               ))}
-              {!qRows.length && <tr><td colSpan="6" className="p-6 text-center opacity-50 text-sm">{T('No quotations match.', 'لا توجد عروض مطابقة.')}</td></tr>}
+              {!qRows.length && (
+                <tr>
+                  <td colSpan="6" className="p-1">
+                    <EmptyState icon={FileText} title={T('No quotations match', 'لا توجد عروض مطابقة')} sub={T('Clear the search to see every quotation.', 'امسح البحث لعرض كل العروض.')} />
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -360,9 +395,9 @@ function PurchaseEditor({ draft, onClose, onSave, onDelete }) {
         <div className="flex items-center gap-3 flex-wrap text-sm">
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" className="accent-[#C9A45C]" checked={d.vat !== false} onChange={(e) => set({ vat: e.target.checked })} />
-            {T('Add VAT', 'إضافة ضريبة')} <span className="tabular-nums opacity-60">{v.rate}%</span>
+            {T('Add VAT', 'إضافة ضريبة')} <span className="tabular-nums text-subtle">{v.rate}%</span>
           </label>
-          <span className="text-[11px] opacity-50">{T('Paid by', 'دُفعت من')}</span>
+          <span className="text-[11px] text-subtle">{T('Paid by', 'دُفعت من')}</span>
           <PayerSelect v={d.paidBy} kind="bill" on={(paidBy) => set({ paidBy })} className="!w-auto !py-1.5 !text-xs" />
           <select className="input !w-auto !py-1.5 !text-xs" value={d.method || 'cash'} onChange={(e) => set({ method: e.target.value })}>
             <option value="bank">{T('Bank transfer', 'حوالة بنكية')}</option>
@@ -370,11 +405,11 @@ function PurchaseEditor({ draft, onClose, onSave, onDelete }) {
             <option value="cheque">{T('Cheque', 'شيك')}</option>
           </select>
         </div>
-        <p className="text-[11px] opacity-45 -mt-1">
+        <p className="-mt-1 text-[11px] leading-relaxed text-subtle">
           {T('Supplier bills are settled from the company account, by cheque or transfer — never from the daily pocket money.', 'فواتير الموردين تُسدد من حساب الشركة بشيك أو حوالة — وليس من نقد المصروف اليومي.')}
         </p>
 
-        <div className="rounded-xl bg-black/5 dark:bg-white/5 p-3">
+        <div className="rounded-xl border border-line/10 bg-surface-2/60 p-3">
           <Line label={T('Net', 'الصافي')} value={money(v.net)} />
           <Line label={T('VAT', 'الضريبة')} value={money(v.vat)} />
           <Line label={T('Total bill', 'إجمالي الفاتورة')} value={money(v.total)} strong tone="text-gold" />
@@ -407,6 +442,14 @@ function Purchases({ s }) {
       .filter((v) => !q || `${v.supplier} ${v.p.no} ${v.p.notes || ''}`.toLowerCase().includes(q.toLowerCase()))
       .sort((a, b) => String(b.p.date).localeCompare(String(a.p.date))),
     [s.purchases, q, cat],
+  );
+
+  const sums = rows.reduce(
+    (a, v) => ({
+      net: a.net + v.net, vat: a.vat + v.vat, total: a.total + v.total,
+      paid: a.paid + v.paid, balance: a.balance + v.balance,
+    }),
+    { net: 0, vat: 0, total: 0, paid: 0, balance: 0 },
   );
 
   const blank = () => ({
@@ -456,54 +499,88 @@ function Purchases({ s }) {
         <Tip icon={AlertTriangle} label={T('Overdue bills', 'فواتير متأخرة')} value={money(s.payablesOverdue)} hint={`${s.latePurchaseCount} ${T('past their date', 'تجاوزت تاريخها')}`} tone={s.payablesOverdue ? 'red' : 'emerald'} />
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[180px] max-w-[300px]">
+      <div className="glass flex flex-wrap items-center gap-2 p-2">
+        <div className="relative min-w-[170px] flex-1 sm:max-w-[280px]">
           <Search size={14} className="absolute start-3 top-1/2 -translate-y-1/2 opacity-40" />
-          <input className="input !py-2 ps-9" placeholder={T('Search supplier or number', 'بحث بمورد أو رقم')} value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input !py-2 ps-9 !text-xs" placeholder={T('Search supplier or number', 'بحث بمورد أو رقم')} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <select className="input !w-auto !py-2 !text-xs" value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="">{T('All categories', 'كل الفئات')}</option>
           {PUR_CATS.map(([k, en, ar]) => <option key={k} value={k}>{T(en, ar)}</option>)}
         </select>
-        <button type="button" className="btn-ghost !py-2 !px-3 text-xs" onClick={exportCsv}><Download size={14} />{T('CSV', 'CSV')}</button>
-        <button type="button" className="btn-terra text-xs ms-auto" onClick={() => setEdit(blank())}><Plus size={15} />{T('New bill', 'فاتورة جديدة')}</button>
+        <span className="hidden text-[11px] tabular-nums text-subtle sm:inline">{rows.length}/{s.purchases.length}</span>
+        <div className="ms-auto flex items-center gap-2">
+          <button type="button" className="btn-ghost !py-2 !px-3 text-xs" onClick={exportCsv}><Download size={14} />{T('CSV', 'CSV')}</button>
+          <button type="button" className="btn-terra !py-2 !px-3 text-xs" onClick={() => setEdit(blank())}><Plus size={15} />{T('New bill', 'فاتورة جديدة')}</button>
+        </div>
       </div>
 
       <div className="glass overflow-auto">
         <table className="w-full text-sm">
-          <thead className="text-[11px] opacity-55">
-            <tr>{['#', T('Date', 'التاريخ'), T('Supplier', 'المورد'), T('Category', 'الفئة'), T('Net', 'الصافي'), T('VAT', 'ضريبة'), T('Total', 'الإجمالي'), T('Paid', 'المدفوع'), T('Balance', 'المتبقي'), T('Status', 'الحالة'), ''].map((h, i) => <th key={i} className="p-2.5 text-start font-semibold whitespace-nowrap">{h}</th>)}</tr>
+          <thead>
+            <tr>
+              {['#', T('Date', 'التاريخ'), T('Supplier', 'المورد'), T('Category', 'الفئة')].map((h, i) => <th key={i} className="whitespace-nowrap p-3 text-start">{h}</th>)}
+              {[T('Net', 'الصافي'), T('VAT', 'ضريبة'), T('Total', 'الإجمالي'), T('Paid', 'المدفوع'), T('Balance', 'المتبقي')].map((h, i) => <th key={i} className="whitespace-nowrap p-3 text-end">{h}</th>)}
+              <th className="whitespace-nowrap p-3 text-start">{T('Status', 'الحالة')}</th>
+              <th className="p-3" />
+            </tr>
           </thead>
           <tbody>
             {rows.map((v) => {
               const st = statusOf(v);
               return (
-                <tr key={v.p.id} className="border-t border-black/5 dark:border-white/10 hover:bg-gold/5">
-                  <td className="p-2.5 font-semibold whitespace-nowrap">{v.p.no}</td>
-                  <td className="p-2.5 text-xs opacity-60 whitespace-nowrap" dir="ltr">{v.p.date}</td>
-                  <td className="p-2.5 min-w-[130px]">{v.supplier}</td>
-                  <td className="p-2.5 text-xs opacity-60 whitespace-nowrap">{catName(PUR_CATS, v.p.cat, lang)}</td>
-                  <td className="p-2.5 tabular-nums">{money(v.net)}</td>
-                  <td className="p-2.5 tabular-nums opacity-70">{money(v.vat)}</td>
-                  <td className="p-2.5 tabular-nums font-semibold">{money(v.total)}</td>
-                  <td className="p-2.5 tabular-nums text-emerald-500">
+                <tr key={v.p.id} className="border-t border-line/10 transition-colors duration-200 hover:bg-gold/5">
+                  <td className="whitespace-nowrap p-3 font-semibold">{v.p.no}</td>
+                  <td className="whitespace-nowrap p-3 text-xs tabular-nums text-subtle" dir="ltr">{v.p.date}</td>
+                  <td className="min-w-[130px] p-3">{v.supplier}</td>
+                  <td className="whitespace-nowrap p-3 text-xs text-subtle">{catName(PUR_CATS, v.p.cat, lang)}</td>
+                  <td className="p-3 text-end tabular-nums">{money(v.net)}</td>
+                  <td className="p-3 text-end tabular-nums text-muted">{money(v.vat)}</td>
+                  <td className="p-3 text-end font-semibold tabular-nums">{money(v.total)}</td>
+                  <td className="p-3 text-end tabular-nums text-emerald-500">
                     {money(v.paid)}
-                    {v.paid > 0.005 && <div className="text-[10px] opacity-45 whitespace-nowrap font-normal">{T(payerOf(v.p.paidBy || 'company').en, payerOf(v.p.paidBy || 'company').ar)}</div>}
+                    {v.paid > 0.005 && <div className="whitespace-nowrap text-[10px] font-normal text-subtle">{T(payerOf(v.p.paidBy || 'company').en, payerOf(v.p.paidBy || 'company').ar)}</div>}
                   </td>
-                  <td className={`p-2.5 tabular-nums font-bold ${v.balance ? 'text-terra' : 'opacity-40'}`}>{money(v.balance)}</td>
-                  <td className="p-2.5 whitespace-nowrap">
+                  <td className={`p-3 text-end font-bold tabular-nums ${v.balance ? 'text-terra' : 'text-subtle'}`}>{money(v.balance)}</td>
+                  <td className="whitespace-nowrap p-3">
                     <span className={`badge ${BADGE[st]}`}>{T({ paid: 'Paid', partial: 'Partial', open: 'Open', overdue: 'Overdue' }[st], { paid: 'مدفوعة', partial: 'جزئي', open: 'مفتوحة', overdue: 'متأخرة' }[st])}</span>
-                    {v.overdue && <span className="text-[10px] text-red-400 ms-1">{v.late}d</span>}
+                    {v.overdue && <span className="ms-1 text-[10px] text-red-400">{v.late}d</span>}
                   </td>
-                  <td className="p-2.5 whitespace-nowrap text-end">
-                    {v.balance > 0.005 && <button type="button" className="text-emerald-500 me-2" title={T('Mark fully paid', 'تعليم كمدفوعة')} onClick={() => settle(v)}><Check size={15} /></button>}
-                    <button type="button" className="text-gold" title={T('Edit', 'تحرير')} onClick={() => setEdit({ ...v.p, vatRate: v.p.vatRate ?? rates.vat })}><Pencil size={14} /></button>
+                  <td className="whitespace-nowrap p-3 text-end">
+                    {v.balance > 0.005 && <button type="button" className="me-2 text-emerald-500 transition-transform duration-200 hover:scale-110" title={T('Mark fully paid', 'تعليم كمدفوعة')} onClick={() => settle(v)}><Check size={15} /></button>}
+                    <button type="button" className="text-gold transition-transform duration-200 hover:scale-110" title={T('Edit', 'تحرير')} onClick={() => setEdit({ ...v.p, vatRate: v.p.vatRate ?? rates.vat })}><Pencil size={14} /></button>
                   </td>
                 </tr>
               );
             })}
-            {!rows.length && <tr><td colSpan="11" className="p-8 text-center opacity-50">{T('No supplier bills yet. Add the first one to start tracking costs and VAT.', 'لا توجد فواتير موردين بعد. أضف الأولى لبدء تتبع التكاليف والضريبة.')}</td></tr>}
+            {!rows.length && (
+              <tr>
+                <td colSpan="11" className="p-1">
+                  <EmptyState
+                    icon={ShoppingCart}
+                    title={T('No supplier bills yet', 'لا توجد فواتير موردين بعد')}
+                    sub={q || cat
+                      ? T('Nothing matches these filters — clear them to see all bills.', 'لا نتائج لهذه المرشحات — امسحها لعرض كل الفواتير.')
+                      : T('Add the first bill to start tracking costs and VAT.', 'أضف أول فاتورة لبدء تتبع التكاليف والضريبة.')}
+                    action={<button type="button" className="btn-terra btn-sm mt-1" onClick={() => setEdit(blank())}><Plus size={14} />{T('New bill', 'فاتورة جديدة')}</button>}
+                  />
+                </td>
+              </tr>
+            )}
           </tbody>
+          {rows.length > 0 && (
+            <tfoot>
+              <tr className="border-t border-line/20 bg-line/[0.03]">
+                <td className="p-3 text-[10px] font-bold uppercase tracking-[0.1em] text-subtle" colSpan="4">{T('Totals', 'الإجمالي')}</td>
+                <td className="p-3 text-end tabular-nums">{money(sums.net)}</td>
+                <td className="p-3 text-end tabular-nums text-muted">{money(sums.vat)}</td>
+                <td className="p-3 text-end font-bold tabular-nums">{money(sums.total)}</td>
+                <td className="p-3 text-end font-bold tabular-nums text-emerald-500">{money(sums.paid)}</td>
+                <td className="p-3 text-end font-bold tabular-nums text-terra">{money(sums.balance)}</td>
+                <td /><td />
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 
@@ -524,6 +601,10 @@ function PocketMoney({ s }) {
   const [sup, setSup] = useState(null);
 
   const days = useMemo(() => cash.map(cashView).sort((a, b) => b.date.localeCompare(a.date)), [cash]);
+  const sums = days.reduce(
+    (a, d) => ({ open: a.open + d.open, spent: a.spent + d.spent, outside: a.outside + d.outside, remaining: a.remaining + d.remaining, count: a.count + d.count }),
+    { open: 0, spent: 0, outside: 0, remaining: 0, count: 0 },
+  );
   const day = days.find((d) => d.date === date) || null;
   const suggested = carryFrom(cash, date);
 
@@ -589,7 +670,7 @@ function PocketMoney({ s }) {
           <button type="button" className="btn-ghost !py-2 !px-3 text-xs" onClick={() => setDate(todayStr())}>{T('Today', 'اليوم')}</button>
         </div>
         {suggested !== 0 && (
-          <span className="text-[11px] opacity-55">
+          <span className="text-[11px] text-subtle">
             {T('Carried from the previous day', 'مرحّل من اليوم السابق')}: <b className="tabular-nums">{money(suggested)}</b>
           </span>
         )}
@@ -604,7 +685,7 @@ function PocketMoney({ s }) {
             </div>
             <button type="button" className="btn-gold" onClick={openDay}><Plus size={15} />{T('Open cash box', 'فتح الصندوق')}</button>
           </div>
-          {suggested !== 0 && <p className="text-[11px] opacity-50 mt-2">{T('Leave it empty to carry over the previous remainder.', 'اتركه فارغاً لترحيل المتبقي من اليوم السابق.')}</p>}
+          {suggested !== 0 && <p className="mt-2 text-[11px] text-subtle">{T('Leave it empty to carry over the previous remainder.', 'اتركه فارغاً لترحيل المتبقي من اليوم السابق.')}</p>}
         </Panel>
       ) : (
         <div className="grid xl:grid-cols-5 gap-4 items-start">
@@ -625,7 +706,7 @@ function PocketMoney({ s }) {
                 <div>
                   <div className="label">{T('Spent from the box', 'المصروف من الصندوق')}</div>
                   <div className="text-lg font-extrabold tabular-nums text-terra">{money(day.spent)}</div>
-                  {day.outside > 0 && <div className="text-[10px] opacity-50">{T('Outside the box', 'خارج الصندوق')}: {money(day.outside)}</div>}
+                  {day.outside > 0 && <div className="text-[10px] tabular-nums text-subtle">{T('Outside the box', 'خارج الصندوق')}: {money(day.outside)}</div>}
                 </div>
                 <div>
                   <div className="label">{T('Remaining', 'المتبقي')}</div>
@@ -633,8 +714,8 @@ function PocketMoney({ s }) {
                 </div>
               </div>
               <div className="mt-3"><Bar pct={day.open ? (day.spent / day.open) * 100 : 0} className={day.over ? 'bg-red-500' : 'bg-emerald-500'} /></div>
-              {day.over && <p className="text-[11px] text-red-400 mt-2 flex items-center gap-1"><AlertTriangle size={12} />{T('You spent more than what was handed over.', 'صرفت أكثر من المبلغ المسلّم.')}</p>}
-              <p className="text-[11px] opacity-45 mt-2">{T('Remaining cash is what you hand over for the next day — use “Carry over”.', 'المتبقي هو ما يُسلَّم لليوم التالي — استخدم "ترحيل".')}</p>
+              {day.over && <p className="mt-2 flex items-center gap-1 text-[11px] text-red-400"><AlertTriangle size={12} />{T('You spent more than what was handed over.', 'صرفت أكثر من المبلغ المسلّم.')}</p>}
+              <p className="mt-2 text-[11px] leading-relaxed text-subtle">{T('Remaining cash is what you hand over for the next day — use “Carry over”.', 'المتبقي هو ما يُسلَّم لليوم التالي — استخدم "ترحيل".')}</p>
             </Panel>
 
             <Panel title={T('Expenses', 'المصروفات')} sub={T('Every payment of the day — from the box, the company or a partner.', 'كل دفعة في اليوم — من الصندوق أو الشركة أو أحد الشركاء.')}>
@@ -657,28 +738,28 @@ function PocketMoney({ s }) {
                     <EntityPicker kind="supplier" value={sup ? sup.id : ''} onPick={(x) => setSup(x)} placeholder={T('Search suppliers…', 'بحث في الموردين…')} />
                   </div>
                 </div>
-                <p className="text-[11px] opacity-45">
+                <p className="text-[11px] leading-relaxed text-subtle">
                   {T('Only “Pocket money” reduces the box. Company and partner payments are tracked separately and never touch the daily remainder.',
                     'فقط «نقد المصروف» يُخصم من الصندوق. مدفوعات الشركة والشركاء تُتابع منفصلة ولا تمس المتبقي اليومي.')}
                 </p>
               </form>
-              <div className="divide-y divide-black/5 dark:divide-white/10">
+              <div className="divide-y divide-line/10">
                 {day.expenses.map((e) => (
                   <div key={e.id} className="flex items-center gap-3 py-2 text-sm">
-                    <span className="text-[10px] opacity-40 tabular-nums w-10" dir="ltr">{e.at || ''}</span>
-                    <span className="badge bg-black/5 dark:bg-white/10 text-[10px] opacity-70 whitespace-nowrap">{catName(CASH_CATS, e.cat, lang)}</span>
-                    <span className="flex-1 min-w-0 truncate">
+                    <span className="w-10 text-[10px] tabular-nums text-subtle" dir="ltr">{e.at || ''}</span>
+                    <span className="badge whitespace-nowrap border border-line/10 bg-surface-2 text-[10px] text-muted">{catName(CASH_CATS, e.cat, lang)}</span>
+                    <span className="min-w-0 flex-1 truncate">
                       {e.label}
-                      {e.supplier && <span className="text-[10px] opacity-50"> · {e.supplier}</span>}
+                      {e.supplier && <span className="text-[10px] text-subtle"> · {e.supplier}</span>}
                     </span>
-                    <span className={`badge text-[10px] whitespace-nowrap ${isCash(e.paidBy) ? 'bg-black/5 dark:bg-white/10 opacity-60' : isPartner(e.paidBy) ? 'bg-amber-500/15 text-amber-500' : 'bg-sky-500/15 text-sky-400'}`}>
+                    <span className={`badge whitespace-nowrap text-[10px] ${isCash(e.paidBy) ? 'border border-line/10 bg-surface-2 text-muted' : isPartner(e.paidBy) ? 'bg-amber-500/15 text-amber-500' : 'bg-sky-500/15 text-sky-400'}`}>
                       {T(payerOf(e.paidBy).en, payerOf(e.paidBy).ar)}
                     </span>
                     <span className="tabular-nums font-semibold">{money(e.amount)}</span>
                     <button type="button" className="text-red-400/70 hover:text-red-400" onClick={() => delExpense(e.id)}><Trash2 size={13} /></button>
                   </div>
                 ))}
-                {!day.expenses.length && <p className="text-sm opacity-45 py-4 text-center">{T('Nothing spent yet today.', 'لا مصروفات في هذا اليوم.')}</p>}
+                {!day.expenses.length && <p className="py-4 text-center text-sm text-subtle">{T('Nothing spent yet today.', 'لا مصروفات في هذا اليوم.')}</p>}
               </div>
             </Panel>
           </div>
@@ -692,28 +773,28 @@ function PocketMoney({ s }) {
                     if (!v) return null;
                     return (
                       <div key={k}>
-                        <div className="flex justify-between text-[11px] mb-1"><span className="opacity-70">{T(en, ar)}</span><span className="tabular-nums">{money(v)}</span></div>
+                        <div className="mb-1 flex justify-between text-[11px]"><span className="text-muted">{T(en, ar)}</span><span className="font-semibold tabular-nums">{money(v)}</span></div>
                         <Bar pct={day.total ? (v / day.total) * 100 : 0} className="bg-terra" />
                       </div>
                     );
                   })}
                 </div>
-              ) : <p className="text-xs opacity-45 py-3 text-center">{T('No expenses to break down.', 'لا مصروفات للتحليل.')}</p>}
+              ) : <p className="py-3 text-center text-xs text-subtle">{T('No expenses to break down.', 'لا مصروفات للتحليل.')}</p>}
             </Panel>
 
             <Panel title={T('Hand-over chain', 'سلسلة التسليم')} sub={T('Each day starts with what the previous day left.', 'كل يوم يبدأ بما تبقى من اليوم السابق.')}>
               <div className="space-y-1.5">
                 {days.slice(0, 7).map((d) => (
                   <button key={d.id} type="button" onClick={() => setDate(d.date)}
-                    className={`w-full flex items-center gap-2 text-xs py-1.5 px-2 rounded-lg transition ${d.date === date ? 'bg-gold/15' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}>
-                    <span className="tabular-nums opacity-60" dir="ltr">{d.date}</span>
-                    <span className="ms-auto tabular-nums opacity-60">{money(d.open)}</span>
-                    <ArrowRight size={11} className="opacity-30" />
+                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition duration-200 ${d.date === date ? 'bg-gold/15' : 'hover:bg-line/[0.06]'}`}>
+                    <span className="tabular-nums text-subtle" dir="ltr">{d.date}</span>
+                    <span className="ms-auto tabular-nums text-muted">{money(d.open)}</span>
+                    <ArrowRight size={11} className="text-subtle" />
                     <span className={`tabular-nums font-semibold ${d.over ? 'text-red-400' : 'text-emerald-500'}`}>{money(d.remaining)}</span>
                     {d.closed && <Check size={12} className="text-emerald-500" />}
                   </button>
                 ))}
-                {!days.length && <p className="text-xs opacity-45 py-3 text-center">{T('No days yet.', 'لا أيام بعد.')}</p>}
+                {!days.length && <p className="py-3 text-center text-xs text-subtle">{T('No days yet.', 'لا أيام بعد.')}</p>}
               </div>
             </Panel>
           </div>
@@ -730,25 +811,52 @@ function PocketMoney({ s }) {
           { label: 'Expenses', get: (d) => d.count },
         ]))}><Download size={13} />{T('CSV', 'CSV')}</button>}
       >
-        <div className="overflow-auto -mx-1">
+        <div className="-mx-1 overflow-auto">
           <table className="w-full text-sm">
-            <thead className="text-[11px] opacity-55">
-              <tr>{[T('Date', 'التاريخ'), T('Handed over', 'المسلّم'), T('Spent (box)', 'من الصندوق'), T('Outside', 'خارج الصندوق'), T('Remaining', 'المتبقي'), T('Items', 'البنود'), ''].map((h, i) => <th key={i} className="p-2 text-start font-semibold whitespace-nowrap">{h}</th>)}</tr>
+            <thead className="text-[11px]">
+              <tr>
+                <th className="whitespace-nowrap p-2 text-start font-semibold">{T('Date', 'التاريخ')}</th>
+                {[T('Handed over', 'المسلّم'), T('Spent (box)', 'من الصندوق'), T('Outside', 'خارج الصندوق'), T('Remaining', 'المتبقي'), T('Items', 'البنود')].map((h) => <th key={h} className="whitespace-nowrap p-2 text-end font-semibold">{h}</th>)}
+                <th className="whitespace-nowrap p-2 text-start font-semibold">{T('State', 'الحالة')}</th>
+              </tr>
             </thead>
             <tbody>
               {days.map((d) => (
-                <tr key={d.id} className="border-t border-black/5 dark:border-white/10 cursor-pointer hover:bg-gold/5" onClick={() => setDate(d.date)}>
-                  <td className="p-2 tabular-nums whitespace-nowrap" dir="ltr">{d.date}</td>
-                  <td className="p-2 tabular-nums">{money(d.open)}</td>
-                  <td className="p-2 tabular-nums text-terra">{money(d.spent)}</td>
-                  <td className="p-2 tabular-nums opacity-60">{d.outside ? money(d.outside) : '—'}</td>
-                  <td className={`p-2 tabular-nums font-bold ${d.over ? 'text-red-400' : 'text-emerald-500'}`}>{money(d.remaining)}</td>
-                  <td className="p-2 tabular-nums opacity-60">{d.count}</td>
-                  <td className="p-2 text-xs opacity-50">{d.closed ? T('Closed', 'مغلق') : T('Open', 'مفتوح')}</td>
+                <tr key={d.id} className="cursor-pointer border-t border-line/10 transition-colors duration-200 hover:bg-gold/5" onClick={() => setDate(d.date)}>
+                  <td className="whitespace-nowrap p-2 tabular-nums" dir="ltr">{d.date}</td>
+                  <td className="p-2 text-end tabular-nums">{money(d.open)}</td>
+                  <td className="p-2 text-end tabular-nums text-terra">{money(d.spent)}</td>
+                  <td className="p-2 text-end tabular-nums text-subtle">{d.outside ? money(d.outside) : '—'}</td>
+                  <td className={`p-2 text-end font-bold tabular-nums ${d.over ? 'text-red-400' : 'text-emerald-500'}`}>{money(d.remaining)}</td>
+                  <td className="p-2 text-end tabular-nums text-subtle">{d.count}</td>
+                  <td className="whitespace-nowrap p-2 text-xs">
+                    {d.closed
+                      ? <span className="badge bg-emerald-500/15 text-emerald-500">{T('Closed', 'مغلق')}</span>
+                      : <span className="badge bg-gold/15 text-gold">{T('Open', 'مفتوح')}</span>}
+                  </td>
                 </tr>
               ))}
-              {!days.length && <tr><td colSpan="7" className="p-6 text-center opacity-50">{T('Open the first cash box above.', 'افتح أول صندوق من الأعلى.')}</td></tr>}
+              {!days.length && (
+                <tr>
+                  <td colSpan="7" className="p-1">
+                    <EmptyState icon={Banknote} title={T('No cash days yet', 'لا أيام صندوق بعد')} sub={T('Open the first cash box above to start the hand-over chain.', 'افتح أول صندوق من الأعلى لبدء سلسلة التسليم.')} />
+                  </td>
+                </tr>
+              )}
             </tbody>
+            {days.length > 0 && (
+              <tfoot>
+                <tr className="border-t border-line/20 bg-line/[0.03]">
+                  <td className="p-2 text-[10px] font-bold uppercase tracking-[0.1em] text-subtle">{T('Totals', 'الإجمالي')}</td>
+                  <td className="p-2 text-end tabular-nums">{money(sums.open)}</td>
+                  <td className="p-2 text-end tabular-nums text-terra">{money(sums.spent)}</td>
+                  <td className="p-2 text-end tabular-nums text-subtle">{money(sums.outside)}</td>
+                  <td className="p-2 text-end font-bold tabular-nums text-emerald-500">{money(sums.remaining)}</td>
+                  <td className="p-2 text-end tabular-nums text-subtle">{sums.count}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </Panel>
@@ -778,18 +886,17 @@ export default function Accounting({ onNav }) {
   return (
     <div>
       {/* sticky toolbar: switch a book without losing your place */}
-      <div className="sticky top-[49px] md:top-[53px] z-10 -mx-4 md:-mx-8 px-4 md:px-8 py-3 mb-4 bg-cream-50/92 dark:bg-ink/92 backdrop-blur border-b border-black/5 dark:border-white/10">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex gap-1 p-1 rounded-xl bg-black/5 dark:bg-white/5 overflow-x-auto max-w-full">
+      <div className="sticky top-16 z-10 -mx-4 mb-4 border-b border-line/10 bg-canvas/80 px-4 py-3 backdrop-blur-xl md:-mx-8 md:px-8">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="seg">
             {TABS.map(([k, Icon, en, ar]) => (
-              <button key={k} type="button" onClick={() => setTab(k)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${tab === k ? 'bg-gold text-ink shadow-sm' : 'opacity-70 hover:opacity-100'}`}>
-                <Icon size={13} />{T(en, ar)}{count(k) != null && <span className="opacity-60">({count(k)})</span>}
+              <button key={k} type="button" onClick={() => setTab(k)} data-active={tab === k} className="seg-tab">
+                <Icon size={13} />{T(en, ar)}{count(k) != null && <span className="tabular-nums opacity-60">({count(k)})</span>}
               </button>
             ))}
           </div>
           <div className="ms-auto flex items-center gap-3 text-[11px]">
-            <span className="opacity-45 hidden sm:inline">{T('Edits save instantly to the server.', 'التعديلات تُحفظ فوراً على الخادم.')}</span>
+            <span className="hidden text-subtle sm:inline">{T('Edits save instantly to the server.', 'التعديلات تُحفظ فوراً على الخادم.')}</span>
           </div>
         </div>
       </div>

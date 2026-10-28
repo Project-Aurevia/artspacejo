@@ -182,15 +182,32 @@ export const totals = (doc, vatRate) => {
   return { sub, after, vat, total: after + vat };
 };
 
+/**
+ * Bumped when the default palette changes so a returning visitor is migrated exactly once.
+ * After the migration their own light/dark choice is written back and respected forever.
+ * Keep in sync with the pre-paint script in index.html.
+ */
+const THEME_VERSION = 2;
+
 const load = () => {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
     if (s) {
       const { adminPass, ...rest } = s; // never keep a password in client state
-      return { ...rest, auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], customers: [], suppliers: [], rates: migrateRates(s.rates), content: { ...DEFAULT_CONTENT, ...(s.content || {}) }, company: { ...DEFAULT_COMPANY, ...(s.company || {}) } };
+      const stale = (s.themeV || 1) < THEME_VERSION; // pre-v2 state was dark by default
+      return {
+        ...rest,
+        themeV: THEME_VERSION,
+        dark: stale ? false : s.dark !== false,
+        auth: false,
+        leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], customers: [], suppliers: [],
+        rates: migrateRates(s.rates),
+        content: { ...DEFAULT_CONTENT, ...(s.content || {}) },
+        company: { ...DEFAULT_COMPANY, ...(s.company || {}) },
+      };
     }
   } catch {}
-  return { lang: 'ar', dark: true, mode: 'site', auth: false, rates: DEFAULT_RATES, content: DEFAULT_CONTENT, company: DEFAULT_COMPANY, cart: [], leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], customers: [], suppliers: [] };
+  return { lang: 'ar', dark: false, themeV: THEME_VERSION, mode: 'site', auth: false, rates: DEFAULT_RATES, content: DEFAULT_CONTENT, company: DEFAULT_COMPANY, cart: [], leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], customers: [], suppliers: [] };
 };
 
 const Ctx = createContext();
