@@ -59,11 +59,18 @@ const move = (arr, i, d) => {
 
 /* ================= Calculator catalog editor ================= */
 const NEW_ITEM = {
-  area: { en: 'New material', ar: 'صنف جديد', price: 0, dept: 'signage' },
-  addons: { en: 'New add-on', ar: 'إضافة جديدة', price: 0, unit: 'm2', on: false },
-  print: { en: 'New print item', ar: 'منتج مطبوع جديد', price: 0, sizes: ['A4'] },
-  packages: { en: 'New package', ar: 'باقة جديدة', price: 0, dept: 'social', features: { en: [], ar: [] } },
-  marketing: { en: 'New service', ar: 'خدمة جديدة', price: 0, dept: 'marketing' },
+  area: { en: 'New material', ar: 'صنف جديد', price: 0, dept: 'signage', den: '', dar: '' },
+  addons: { en: 'New add-on', ar: 'إضافة جديدة', price: 0, unit: 'm2', on: false, den: '', dar: '' },
+  print: { en: 'New print item', ar: 'منتج مطبوع جديد', price: 0, sizes: ['A4'], den: '', dar: '' },
+  packages: { en: 'New package', ar: 'باقة جديدة', price: 0, dept: 'social', features: { en: [], ar: [] }, den: '', dar: '' },
+  marketing: { en: 'New service', ar: 'خدمة جديدة', price: 0, dept: 'marketing', den: '', dar: '' },
+};
+const ADD_LABEL = {
+  area: ['Add material', 'إضافة مادة'],
+  addons: ['Add add-on', 'إضافة خيار'],
+  print: ['Add print item', 'إضافة مطبوع'],
+  packages: ['Add package', 'إضافة باقة'],
+  marketing: ['Add service', 'إضافة خدمة'],
 };
 
 /** Text field that keeps local state while typing and commits on blur — never rewrites the caret mid-word. */
@@ -96,6 +103,7 @@ export function CatalogEditor({ g, unit, q = '', onAdd }) {
   const shown = entries.filter(([, m]) => !needle || `${m.en || ''} ${m.ar || ''}`.toLowerCase().includes(needle));
   const name = (m) => (lang === 'ar' ? m.ar || m.en : m.en || m.ar) || '—';
   const other = (m) => (lang === 'ar' ? m.en : m.ar) || '';
+  const descOf = (m) => (lang === 'ar' ? m.dar : m.den) || '';
   const deptName = (k) => { const c = CATS.find((x) => x[0] === k); return c ? (lang === 'ar' ? c[2] : c[1]) : k || '—'; };
   const unitOf = (m) => (g === 'addons' ? (m.unit === 'flat' ? T('flat', 'مقطوع') : '/ m²') : unit);
   const patch = (k, p) => upd((o) => ({ rates: { ...o.rates, [g]: { ...o.rates[g], [k]: { ...o.rates[g][k], ...p } } } }));
@@ -125,7 +133,7 @@ export function CatalogEditor({ g, unit, q = '', onAdd }) {
     <div className="glass overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-black/5 dark:border-white/10">
         <span className="text-[11px] opacity-50">{shown.length}/{entries.length} {T('items', 'عنصر')}</span>
-        <button type="button" className="btn-gold !py-1.5 !px-3 text-xs ms-auto" onClick={add}><Plus size={14} />{T('Add item', 'إضافة عنصر')}</button>
+        <button type="button" className="btn-gold !py-1.5 !px-3 text-xs ms-auto" onClick={add}><Plus size={14} />{T(ADD_LABEL[g][0], ADD_LABEL[g][1])}</button>
       </div>
       {shown.length === 0 ? (
         <p className="text-sm opacity-50 text-center py-8">{entries.length ? T('No item matches this search.', 'لا يوجد عنصر مطابق للبحث.') : T('Empty — add your first item.', 'فارغ — أضف أول عنصر.')}</p>
@@ -143,17 +151,30 @@ export function CatalogEditor({ g, unit, q = '', onAdd }) {
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold truncate">{name(m)}</div>
                     {other(m) && <div className="text-[11px] opacity-40 truncate" dir={lang === 'ar' ? 'ltr' : 'rtl'}>{other(m)}</div>}
+                    {descOf(m) && <div className="text-[11px] opacity-45 truncate">{descOf(m)}</div>}
                   </div>
                   <div className="hidden lg:flex items-center gap-1.5 shrink-0">
                     {hasDept && <span className="badge bg-gold/15 text-gold">{deptName(m.dept)}</span>}
-                    {g === 'addons' && m.on && <span className="badge bg-emerald-500/15 text-emerald-500">{T('pre-selected', 'محدد')}</span>}
                     {g === 'print' && <span className="text-[10px] opacity-40">{(m.sizes || []).length} {T('sizes', 'مقاس')}</span>}
                     {g === 'packages' && m.popular && <span className="badge bg-terra/15 text-terra">{T('popular', 'الأكثر طلباً')}</span>}
                   </div>
+                  {g === 'addons' && (
+                    <label className="hidden sm:flex items-center gap-1 shrink-0 text-[10px] cursor-pointer"
+                      title={T('Ticked by default on the website calculator', 'محدد افتراضياً في حاسبة الموقع')}>
+                      <input type="checkbox" className="accent-[#C9A45C]" checked={!!m.on} onChange={(e) => patch(k, { on: e.target.checked })} />
+                      <span className="opacity-55">{T('default', 'افتراضي')}</span>
+                    </label>
+                  )}
                   <div className="flex items-center gap-1.5 shrink-0">
                     <input type="number" step="0.01" className="input !w-[92px] text-end" value={m.price}
                       onChange={(e) => patch(k, { price: parseFloat(e.target.value) || 0 })} aria-label={T('Price', 'السعر')} />
-                    <span className="text-[10px] opacity-45 w-14 truncate">{unitOf(m)}</span>
+                    {g === 'addons' ? (
+                      <select className="input !py-1 !w-[88px] !text-[10px]" value={m.unit || 'm2'}
+                        onChange={(e) => patch(k, { unit: e.target.value })} aria-label={T('Charged', 'طريقة الاحتساب')}>
+                        <option value="m2">{T('per m²', 'للمتر')}</option>
+                        <option value="flat">{T('flat', 'مقطوع')}</option>
+                      </select>
+                    ) : <span className="text-[10px] opacity-45 w-14 truncate">{unitOf(m)}</span>}
                   </div>
                   <button type="button" className="text-red-400/70 hover:text-red-400 shrink-0 p-1" onClick={() => remove(k)} title={T('Delete', 'حذف')}><Trash2 size={15} /></button>
                 </div>
@@ -166,12 +187,9 @@ export function CatalogEditor({ g, unit, q = '', onAdd }) {
                       <select className="input !w-40" value={m.dept || 'signage'} onChange={(e) => patch(k, { dept: e.target.value })}>
                         {CATS.map(([key, en, ar]) => <option key={key} value={key}>{lang === 'ar' ? ar : en}</option>)}
                       </select></div>}
-                    {g === 'addons' && <>
-                      <div><label className="label">{T('Charged', 'طريقة الاحتساب')}</label>
-                        <select className="input !w-40" value={m.unit || 'm2'} onChange={(e) => patch(k, { unit: e.target.value })}>
-                          <option value="m2">{T('per m²', 'للمتر المربع')}</option><option value="flat">{T('flat fee', 'مبلغ مقطوع')}</option></select></div>
-                      <label className="flex items-center gap-2 text-sm pb-2"><input type="checkbox" className="accent-[#C9A45C]" checked={!!m.on} onChange={(e) => patch(k, { on: e.target.checked })} />{T('Pre-selected', 'محدد افتراضياً')}</label>
-                    </>}
+                    {g === 'addons' && <p className="text-[11px] opacity-45 pb-2 flex-1 min-w-[220px]">
+                      {T('The price, how it is charged (per m² or a flat fee) and whether the box starts ticked are all set in the row on the left. The description above is what customers read under the box.', 'السعر وطريقة الاحتساب (للمتر أو مبلغ مقطوع) وهل يبدأ المربع محدداً تُضبط من الصف نفسه. الوصف أعلاه هو ما يقرأه العميل تحت المربع.')}
+                    </p>}
                     {g === 'print' && <div className="flex-1 min-w-[200px]"><label className="label">{T('Available sizes (comma separated)', 'المقاسات المتاحة (مفصولة بفاصلة)')}</label>
                       <BlurText v={(m.sizes || []).join(', ')} dir="ltr" onCommit={(t) => patch(k, { sizes: t.split(',').map((s) => s.trim()).filter(Boolean) })} /></div>}
                     {g === 'packages' && <label className="flex items-center gap-2 text-sm pb-2"><input type="checkbox" className="accent-[#C9A45C]" checked={!!m.popular} onChange={(e) => patch(k, { popular: e.target.checked })} />{T('Mark as "Most Popular"', 'علامة "الأكثر طلباً"')}</label>}

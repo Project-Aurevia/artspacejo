@@ -229,7 +229,7 @@ const PriceRow = ({ label, value, muted }) => (
 );
 
 /** Runs the exact same formulas as the public calculator, so the owner sees what the customer sees. */
-function PricePreview() {
+function PricePreview({ onManage }) {
   const { T, tx, lang, money, rates } = useApp();
   const [mode, setMode] = useState('signage');
   const [mat, setMat] = useState('');
@@ -275,14 +275,28 @@ function PricePreview() {
             ))}
           </div>
           <div className="rounded-lg bg-gold/15 px-3 py-2 text-xs">{T('Area', 'المساحة')}: {dim.w} × {dim.h} = <b className="text-gold">{sg.area.toFixed(2)} m²</b></div>
-          {Object.keys(rates.addons || {}).length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
-            {Object.entries(rates.addons).map(([k, a]) => (
-              <label key={k} className="flex items-center gap-1.5 text-xs cursor-pointer min-w-0">
-                <input type="checkbox" className="accent-[#C9A45C] shrink-0" checked={addonOn(a, sel, k)} onChange={(e) => setSel({ ...sel, [k]: e.target.checked })} />
-                <span className={`truncate ${addonOn(a, sel, k) ? '' : 'opacity-55'}`}>{tx(a)}</span>
-                <span className="opacity-35 shrink-0">{a.unit === 'flat' ? T('flat', 'مقطوع') : '/m²'}</span>
-              </label>
-            ))}
+          {Object.keys(rates.addons || {}).length > 0 && <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-semibold opacity-55">{T('Add-ons', 'الإضافات')}</span>
+              <span className="text-[10px] opacity-35">{T('tick to test', 'حدّد للتجربة')}</span>
+              <button type="button" onClick={() => onManage('addons')} className="text-[10px] opacity-50 hover:opacity-100 hover:text-gold ms-auto flex items-center gap-1">
+                <Tag size={11} />{T('Edit this list', 'تحرير هذه القائمة')}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
+              {Object.entries(rates.addons).map(([k, a]) => {
+                const on = addonOn(a, sel, k);
+                return (
+                  <label key={k} className="flex items-start gap-1.5 text-xs cursor-pointer min-w-0">
+                    <input type="checkbox" className="accent-[#C9A45C] shrink-0 mt-0.5" checked={on} onChange={(e) => setSel({ ...sel, [k]: e.target.checked })} />
+                    <span className="min-w-0">
+                      <span className={`block truncate ${on ? '' : 'opacity-55'}`}>{tx(a)}</span>
+                      <span className="block text-[10px] opacity-35 truncate">{a.unit === 'flat' ? T('flat fee', 'مبلغ مقطوع') : T('per m²', 'للمتر المربع')} · {money(a.price)}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
           </div>}
           <div className="border-t border-black/10 dark:border-white/10 pt-2">
             {sg.lines.map((l) => <PriceRow key={l.k} label={tx(l)} value={money(l.v)} muted={l.k !== 'mat'} />)}
@@ -292,7 +306,13 @@ function PricePreview() {
       {mode === 'print' && (!itKey
         ? <p className="text-sm opacity-50 py-6 text-center">{T('Add a printing item first.', 'أضف منتج طباعة أولاً.')}</p>
         : <div className="space-y-3">
-          <div><label className="label">{T('Item', 'المنتج')}</label>
+          <div>
+            <div className="flex items-center gap-2">
+              <label className="label !mb-0">{T('Item', 'المنتج')}</label>
+              <button type="button" onClick={() => onManage('print')} className="text-[10px] opacity-50 hover:opacity-100 hover:text-gold ms-auto flex items-center gap-1">
+                <Tag size={11} />{T('Edit this list', 'تحرير هذه القائمة')}
+              </button>
+            </div>
             <select className="input" value={itKey} onChange={(e) => setPr({ ...pr, item: e.target.value, size: '' })}>
               {printKeys.map((k) => <option key={k} value={k}>{tx(rates.print[k])}</option>)}
             </select></div>
@@ -434,9 +454,9 @@ function Pricing() {
       <div className="grid xl:grid-cols-5 gap-4 items-start">
         <div className="xl:col-span-3">
           <CatalogEditor g={g} unit={T(cur[3], cur[4])} q={q} onAdd={() => setQ('')} />
-          <p className="text-[11px] opacity-45 mt-2">{T('Click a row to rename it, change its department or reorder it. Prices save as you type.', 'اضغط أي صف لتغيير الاسم أو القسم أو الترتيب. الأسعار تُحفظ أثناء الكتابة.')}</p>
+          <p className="text-[11px] opacity-45 mt-2">{T('Click a row to rename it, edit its description, department or order. Prices, the charging basis and "ticked by default" are edited right in the row and save as you type.', 'اضغط أي صف لتغيير الاسم أو الوصف أو القسم أو الترتيب. السعر وطريقة الاحتساب وخيار "محدد افتراضياً" تُعدّل من الصف نفسه وتُحفظ أثناء الكتابة.')}</p>
         </div>
-        <div className="xl:col-span-2"><PricePreview /></div>
+        <div className="xl:col-span-2"><PricePreview onManage={setG} /></div>
       </div>
 
       <div className="mt-4"><Multipliers /></div>
