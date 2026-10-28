@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Wallet, Receipt, ShoppingCart, Banknote, Plus, Trash2, Pencil, Download, Search, Check,
-  AlertTriangle, ArrowRight, ExternalLink, CalendarDays,
+  AlertTriangle, ArrowRight, ExternalLink, CalendarDays, BookUser,
 } from 'lucide-react';
 import { useApp, uid } from './store.jsx';
 import { Modal, Field } from './ui.jsx';
@@ -9,6 +9,8 @@ import { todayStr, addDays, safeTotals } from './adminStats.js';
 import {
   PUR_CATS, CASH_CATS, catName, nextNo, purchaseView, cashView, carryFrom, accountingSummary, toCsv,
 } from './accounting.js';
+import { payerOptions, payerOf, isCash, isPartner, clientOf } from './directory.js';
+import Directory, { EntityPicker } from './Directory.jsx';
 
 const TONE = { gold: 'text-gold', emerald: 'text-emerald-500', red: 'text-red-400', terra: 'text-terra', sky: 'text-sky-400' };
 const BADGE = {
@@ -89,6 +91,16 @@ function saveCsv(name, text) {
 }
 
 const statusOf = (v) => (v.balance <= 0.005 ? 'paid' : v.overdue ? 'overdue' : v.paid > 0 ? 'partial' : 'open');
+
+/** Who actually put the money down: the pocket-money box, the company, or a partner. */
+function PayerSelect({ v = 'cash', on, kind = 'expense', className = '' }) {
+  const { T } = useApp();
+  return (
+    <select className={`input ${className}`} value={v || (kind === 'bill' ? 'company' : 'cash')} onChange={(e) => on(e.target.value)}>
+      {payerOptions(kind).map((p) => <option key={p.id} value={p.id}>{T(p.en, p.ar)}</option>)}
+    </select>
+  );
+}
 
 /* ================= Overview ================= */
 function Overview({ s, onTab, onNav }) {
@@ -181,6 +193,31 @@ function Overview({ s, onTab, onNav }) {
             <Line label={`${T('Open quotes', 'عروض مفتوحة')} (${s.openQuoteCount})`} value={money(s.pipeline)} />
             <Line label={`${T('Approved, not invoiced', 'معتمدة وغير مفوترة')} (${s.approvedQuoteCount})`} value={money(s.approved)} tone="text-emerald-500" />
           </Panel>
+
+          <Panel
+            title={T('Who paid', 'من دفع')}
+            sub={T('Every petty expense and supplier settlement, by source.', 'كل مصروف ودفعة مورد حسب مصدر المال.')}
+            action={<button type="button" className="btn-ghost !py-1.5 !px-3 text-xs" onClick={() => onTab('cash')}><ArrowRight size={13} />{T('Pocket money', 'نقد المصروف')}</button>}
+          >
+            {s.byPayer.length ? (
+              <div className="space-y-2">
+                {s.byPayer.map((p) => (
+                  <div key={p.id}>
+                    <div className="flex justify-between text-[11px] mb-1">
+                      <span className="opacity-70">{T(p.en, p.ar)}</span>
+                      <span className="tabular-nums">{money(p.value)}</span>
+                    </div>
+                    <Bar pct={(p.value / Math.max(1, s.paidByCompany + s.petty)) * 100} className={p.id === 'cash' ? 'bg-terra' : isPartner(p.id) ? 'bg-amber-500' : 'bg-sky-400'} />
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-sm opacity-50 py-4 text-center">{T('Nothing paid yet.', 'لا مدفوعات بعد.')}</p>}
+            {s.partnerOut > 0 && (
+              <p className="text-[11px] mt-3 leading-snug text-amber-500">
+                {T(`Partners funded ${money(s.partnerOut)} — this is owed back to them.`, `مول الشركاء ${money(s.partnerOut)} — يُرد لهم.`)}
+              </p>
+            )}
+          </Panel>
         </div>
       </div>
 
@@ -196,9 +233,15 @@ function Overview({ s, onTab, onNav }) {
 
 /* ================= Sales (read-only mirror) ================= */
 function Sales({ s, onNav }) {
-  const { T, money, leads, quotes, rates } = useApp();
+  const { T, money, leads, quotes, rates, customers } = useApp();
   const [q, setQ] = useState('');
-  const client = (id) => leads.find((l) => l.id === id)?.name || '—';
+  /* Customer directory first, CRM lead as the fallback for documents issued before it existed. */
+  const client = (doc) => {
+    const d = typeof doc === 'string' ? { clientId: doc } : (doc || {});
+    const c = clientOf(d, customers, leads);
+    if (!c) return '—';
+    return [c.company, c.name].filter(Boolean).join(' · ') || '—';
+  };
   const hit = (no, name) => !q || `${no} ${name}`.toLowerCase().includes(q.toLowerCase());
   const invRows = s.invoices.filter((r) => hit(r.inv.no, client(r.inv.clientId)));
   const qRows = quotes.filter((x) => hit(x.no, client(x.clientId)));
@@ -289,7 +332,13 @@ function PurchaseEditor({ draft, onClose, onSave, onDelete }) {
     <Modal wide title={d.no} onClose={onClose}>
       <form onSubmit={(e) => { e.preventDefault(); onSave(d); }} className="space-y-4">
         <div className="grid sm:grid-cols-2 gap-3">
-          <Field label={T('Supplier', 'المورد')} v={d.supplier} on={(supplier) => set({ supplier })} required />
+          <div className="sm:col-span-2">
+            <EntityPicker
+              kind="supplier" label={T('Supplier', 'المورد')} value={d.supplierId}
+              nameFallback={d.supplier}
+              onPick={(e) => set({ supplierId: e ? e.id : '', supplier: e ? e.name : '' })}
+            />
+          </div>
           <div>
             <label className="label">{T('Category', 'الفئة')}</label>
             <select className="input" value={d.cat} onChange={(e) => set({ cat: e.target.value })}>
@@ -313,12 +362,17 @@ function PurchaseEditor({ draft, onClose, onSave, onDelete }) {
             <input type="checkbox" className="accent-[#C9A45C]" checked={d.vat !== false} onChange={(e) => set({ vat: e.target.checked })} />
             {T('Add VAT', 'إضافة ضريبة')} <span className="tabular-nums opacity-60">{v.rate}%</span>
           </label>
+          <span className="text-[11px] opacity-50">{T('Paid by', 'دُفعت من')}</span>
+          <PayerSelect v={d.paidBy} kind="bill" on={(paidBy) => set({ paidBy })} className="!w-auto !py-1.5 !text-xs" />
           <select className="input !w-auto !py-1.5 !text-xs" value={d.method || 'cash'} onChange={(e) => set({ method: e.target.value })}>
             <option value="bank">{T('Bank transfer', 'حوالة بنكية')}</option>
             <option value="cash">{T('Cash', 'نقداً')}</option>
             <option value="cheque">{T('Cheque', 'شيك')}</option>
           </select>
         </div>
+        <p className="text-[11px] opacity-45 -mt-1">
+          {T('Supplier bills are settled from the company account, by cheque or transfer — never from the daily pocket money.', 'فواتير الموردين تُسدد من حساب الشركة بشيك أو حوالة — وليس من نقد المصروف اليومي.')}
+        </p>
 
         <div className="rounded-xl bg-black/5 dark:bg-white/5 p-3">
           <Line label={T('Net', 'الصافي')} value={money(v.net)} />
@@ -342,7 +396,7 @@ function PurchaseEditor({ draft, onClose, onSave, onDelete }) {
 }
 
 function Purchases({ s }) {
-  const { T, lang, money, rates, purchases, upd } = useApp();
+  const { T, lang, money, rates, purchases, suppliers, upd } = useApp();
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('');
   const [edit, setEdit] = useState(null);
@@ -357,11 +411,13 @@ function Purchases({ s }) {
 
   const blank = () => ({
     id: uid('pur'), no: nextNo(purchases, 'PUR'), date: todayStr(), due: addDays(todayStr(), 30),
-    supplier: '', cat: 'materials', amount: 0, vat: true, vatRate: rates.vat, paid: 0, method: 'bank', notes: '',
+    supplier: '', supplierId: '', cat: 'materials', amount: 0, vat: true, vatRate: rates.vat, paid: 0,
+    paidBy: 'company', method: 'bank', notes: '',
   });
 
   const save = (d) => {
-    const rec = { ...d, supplier: String(d.supplier || '').trim(), updated: new Date().toISOString() };
+    const sup = (suppliers || []).find((x) => x.id === d.supplierId);
+    const rec = { ...d, supplier: String(sup ? sup.name : d.supplier || '').trim(), updated: new Date().toISOString() };
     upd((o) => ({
       purchases: o.purchases.some((x) => x.id === rec.id)
         ? o.purchases.map((x) => (x.id === rec.id ? rec : x))
@@ -430,7 +486,10 @@ function Purchases({ s }) {
                   <td className="p-2.5 tabular-nums">{money(v.net)}</td>
                   <td className="p-2.5 tabular-nums opacity-70">{money(v.vat)}</td>
                   <td className="p-2.5 tabular-nums font-semibold">{money(v.total)}</td>
-                  <td className="p-2.5 tabular-nums text-emerald-500">{money(v.paid)}</td>
+                  <td className="p-2.5 tabular-nums text-emerald-500">
+                    {money(v.paid)}
+                    {v.paid > 0.005 && <div className="text-[10px] opacity-45 whitespace-nowrap font-normal">{T(payerOf(v.p.paidBy || 'company').en, payerOf(v.p.paidBy || 'company').ar)}</div>}
+                  </td>
                   <td className={`p-2.5 tabular-nums font-bold ${v.balance ? 'text-terra' : 'opacity-40'}`}>{money(v.balance)}</td>
                   <td className="p-2.5 whitespace-nowrap">
                     <span className={`badge ${BADGE[st]}`}>{T({ paid: 'Paid', partial: 'Partial', open: 'Open', overdue: 'Overdue' }[st], { paid: 'مدفوعة', partial: 'جزئي', open: 'مفتوحة', overdue: 'متأخرة' }[st])}</span>
@@ -461,6 +520,8 @@ function PocketMoney({ s }) {
   const [amount, setAmount] = useState('');
   const [cat, setCat] = useState('other');
   const [openAmt, setOpenAmt] = useState('');
+  const [paidBy, setPaidBy] = useState('cash');
+  const [sup, setSup] = useState(null);
 
   const days = useMemo(() => cash.map(cashView).sort((a, b) => b.date.localeCompare(a.date)), [cash]);
   const day = days.find((d) => d.date === date) || null;
@@ -479,9 +540,12 @@ function PocketMoney({ s }) {
     e.preventDefault();
     const n = parseFloat(amount);
     if (!day || !label.trim() || !Number.isFinite(n) || n <= 0) return;
-    const rec = { id: uid('e'), label: label.trim(), amount: n, cat, at: new Date().toTimeString().slice(0, 5) };
+    const rec = {
+      id: uid('e'), label: label.trim(), amount: n, cat, at: new Date().toTimeString().slice(0, 5),
+      paidBy, supplierId: sup ? sup.id : '', supplier: sup ? sup.name : '',
+    };
     upd((o) => ({ cash: o.cash.map((d) => (d.id === day.id ? { ...d, expenses: [...(d.expenses || []), rec] } : d)) }));
-    setLabel(''); setAmount('');
+    setLabel(''); setAmount(''); setSup(null); setPaidBy('cash');
   };
 
   const delExpense = (id) => upd((o) => ({ cash: o.cash.map((d) => (d.id === day.id ? { ...d, expenses: (d.expenses || []).filter((x) => x.id !== id) } : d)) }));
@@ -506,12 +570,14 @@ function PocketMoney({ s }) {
 
   const monthKeyNow = todayStr().slice(0, 7);
   const monthSpent = days.filter((d) => d.date.slice(0, 7) === monthKeyNow).reduce((sum, d) => sum + d.spent, 0);
+  const monthOutside = days.filter((d) => d.date.slice(0, 7) === monthKeyNow).reduce((sum, d) => sum + d.outside, 0);
 
   return (
     <div className="space-y-4">
-      <div className="grid sm:grid-cols-3 gap-3">
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <Tip icon={Banknote} label={T('Cash in hand', 'النقد المتبقي')} value={money(s.cashOnHand)} hint={s.latestDay ? `${T('Latest box', 'آخر صندوق')} ${s.latestDay.date}` : T('No box opened yet', 'لم يُفتح صندوق بعد')} tone={s.cashOnHand < 0 ? 'red' : 'emerald'} />
-        <Tip icon={CalendarDays} label={T('Spent this month', 'مصروف هذا الشهر')} value={money(monthSpent)} hint={T('Petty cash only', 'نقد المصروف فقط')} tone="terra" />
+        <Tip icon={CalendarDays} label={T('Spent this month', 'مصروف هذا الشهر')} value={money(monthSpent)} hint={T('From the cash box', 'من الصندوق')} tone="terra" />
+        <Tip icon={Wallet} label={T('Paid outside the box', 'مدفوع خارج الصندوق')} value={money(monthOutside)} hint={T('Company account or a partner', 'حساب الشركة أو أحد الشركاء')} tone="sky" />
         <Tip icon={Wallet} label={T('Days logged', 'أيام مسجّلة')} value={String(days.length)} hint={`${T('Total spent', 'إجمالي المصروف')} ${money(s.petty)}`} />
       </div>
 
@@ -557,8 +623,9 @@ function PocketMoney({ s }) {
                   <AmountInput v={day.open} onCommit={setOpen} aria-label={T('Handed over', 'المسلّم')} />
                 </div>
                 <div>
-                  <div className="label">{T('Spent', 'المصروف')}</div>
+                  <div className="label">{T('Spent from the box', 'المصروف من الصندوق')}</div>
                   <div className="text-lg font-extrabold tabular-nums text-terra">{money(day.spent)}</div>
+                  {day.outside > 0 && <div className="text-[10px] opacity-50">{T('Outside the box', 'خارج الصندوق')}: {money(day.outside)}</div>}
                 </div>
                 <div>
                   <div className="label">{T('Remaining', 'المتبقي')}</div>
@@ -570,21 +637,43 @@ function PocketMoney({ s }) {
               <p className="text-[11px] opacity-45 mt-2">{T('Remaining cash is what you hand over for the next day — use “Carry over”.', 'المتبقي هو ما يُسلَّم لليوم التالي — استخدم "ترحيل".')}</p>
             </Panel>
 
-            <Panel title={T('Expenses', 'المصروفات')} sub={T('Every cash payment of the day.', 'كل دفعة نقدية في اليوم.')}>
-              <form onSubmit={addExpense} className="flex gap-2 flex-wrap mb-3">
-                <select className="input !w-auto !py-2 !text-xs" value={cat} onChange={(e) => setCat(e.target.value)}>
-                  {CASH_CATS.map(([k, en, ar]) => <option key={k} value={k}>{T(en, ar)}</option>)}
-                </select>
-                <input className="input flex-1 min-w-[140px] !py-2" placeholder={T('What was it for?', 'على ماذا صُرف؟')} value={label} onChange={(e) => setLabel(e.target.value)} />
-                <input className="input !w-28 !py-2 tabular-nums" inputMode="decimal" placeholder={T('Amount', 'المبلغ')} value={amount} onChange={(e) => setAmount(e.target.value)} />
-                <button className="btn-gold !py-2" disabled={!label.trim() || !parseFloat(amount)}><Plus size={14} />{T('Add', 'إضافة')}</button>
+            <Panel title={T('Expenses', 'المصروفات')} sub={T('Every payment of the day — from the box, the company or a partner.', 'كل دفعة في اليوم — من الصندوق أو الشركة أو أحد الشركاء.')}>
+              <form onSubmit={addExpense} className="mb-3 space-y-2">
+                <div className="flex gap-2 flex-wrap">
+                  <select className="input !w-auto !py-2 !text-xs" value={cat} onChange={(e) => setCat(e.target.value)}>
+                    {CASH_CATS.map(([k, en, ar]) => <option key={k} value={k}>{T(en, ar)}</option>)}
+                  </select>
+                  <input className="input flex-1 min-w-[140px] !py-2" placeholder={T('What was it for?', 'على ماذا صُرف؟')} value={label} onChange={(e) => setLabel(e.target.value)} />
+                  <input className="input !w-28 !py-2 tabular-nums" inputMode="decimal" placeholder={T('Amount', 'المبلغ')} value={amount} onChange={(e) => setAmount(e.target.value)} />
+                  <button className="btn-gold !py-2" disabled={!label.trim() || !parseFloat(amount)}><Plus size={14} />{T('Add', 'إضافة')}</button>
+                </div>
+                <div className="flex gap-2 flex-wrap items-end">
+                  <div className="min-w-[150px]">
+                    <label className="label">{T('Paid by', 'دُفعت من')}</label>
+                    <PayerSelect v={paidBy} on={setPaidBy} className="!py-1.5 !text-xs" />
+                  </div>
+                  <div className="flex-1 min-w-[190px]">
+                    <label className="label">{T('Supplier (optional)', 'المورد (اختياري)')}</label>
+                    <EntityPicker kind="supplier" value={sup ? sup.id : ''} onPick={(x) => setSup(x)} placeholder={T('Search suppliers…', 'بحث في الموردين…')} />
+                  </div>
+                </div>
+                <p className="text-[11px] opacity-45">
+                  {T('Only “Pocket money” reduces the box. Company and partner payments are tracked separately and never touch the daily remainder.',
+                    'فقط «نقد المصروف» يُخصم من الصندوق. مدفوعات الشركة والشركاء تُتابع منفصلة ولا تمس المتبقي اليومي.')}
+                </p>
               </form>
               <div className="divide-y divide-black/5 dark:divide-white/10">
                 {day.expenses.map((e) => (
                   <div key={e.id} className="flex items-center gap-3 py-2 text-sm">
                     <span className="text-[10px] opacity-40 tabular-nums w-10" dir="ltr">{e.at || ''}</span>
                     <span className="badge bg-black/5 dark:bg-white/10 text-[10px] opacity-70 whitespace-nowrap">{catName(CASH_CATS, e.cat, lang)}</span>
-                    <span className="flex-1 min-w-0 truncate">{e.label}</span>
+                    <span className="flex-1 min-w-0 truncate">
+                      {e.label}
+                      {e.supplier && <span className="text-[10px] opacity-50"> · {e.supplier}</span>}
+                    </span>
+                    <span className={`badge text-[10px] whitespace-nowrap ${isCash(e.paidBy) ? 'bg-black/5 dark:bg-white/10 opacity-60' : isPartner(e.paidBy) ? 'bg-amber-500/15 text-amber-500' : 'bg-sky-500/15 text-sky-400'}`}>
+                      {T(payerOf(e.paidBy).en, payerOf(e.paidBy).ar)}
+                    </span>
                     <span className="tabular-nums font-semibold">{money(e.amount)}</span>
                     <button type="button" className="text-red-400/70 hover:text-red-400" onClick={() => delExpense(e.id)}><Trash2 size={13} /></button>
                   </div>
@@ -604,7 +693,7 @@ function PocketMoney({ s }) {
                     return (
                       <div key={k}>
                         <div className="flex justify-between text-[11px] mb-1"><span className="opacity-70">{T(en, ar)}</span><span className="tabular-nums">{money(v)}</span></div>
-                        <Bar pct={day.spent ? (v / day.spent) * 100 : 0} className="bg-terra" />
+                        <Bar pct={day.total ? (v / day.total) * 100 : 0} className="bg-terra" />
                       </div>
                     );
                   })}
@@ -635,7 +724,8 @@ function PocketMoney({ s }) {
         action={<button type="button" className="btn-ghost !py-1.5 !px-3 text-xs" onClick={() => saveCsv(`petty-cash-${todayStr()}.csv`, toCsv(days, [
           { label: 'Date', get: (d) => d.date },
           { label: 'Handed over', get: (d) => d.open },
-          { label: 'Spent', get: (d) => d.spent },
+          { label: 'Spent from box', get: (d) => d.spent },
+          { label: 'Paid outside', get: (d) => d.outside },
           { label: 'Remaining', get: (d) => d.remaining },
           { label: 'Expenses', get: (d) => d.count },
         ]))}><Download size={13} />{T('CSV', 'CSV')}</button>}
@@ -643,7 +733,7 @@ function PocketMoney({ s }) {
         <div className="overflow-auto -mx-1">
           <table className="w-full text-sm">
             <thead className="text-[11px] opacity-55">
-              <tr>{[T('Date', 'التاريخ'), T('Handed over', 'المسلّم'), T('Spent', 'المصروف'), T('Remaining', 'المتبقي'), T('Items', 'البنود'), ''].map((h, i) => <th key={i} className="p-2 text-start font-semibold whitespace-nowrap">{h}</th>)}</tr>
+              <tr>{[T('Date', 'التاريخ'), T('Handed over', 'المسلّم'), T('Spent (box)', 'من الصندوق'), T('Outside', 'خارج الصندوق'), T('Remaining', 'المتبقي'), T('Items', 'البنود'), ''].map((h, i) => <th key={i} className="p-2 text-start font-semibold whitespace-nowrap">{h}</th>)}</tr>
             </thead>
             <tbody>
               {days.map((d) => (
@@ -651,12 +741,13 @@ function PocketMoney({ s }) {
                   <td className="p-2 tabular-nums whitespace-nowrap" dir="ltr">{d.date}</td>
                   <td className="p-2 tabular-nums">{money(d.open)}</td>
                   <td className="p-2 tabular-nums text-terra">{money(d.spent)}</td>
+                  <td className="p-2 tabular-nums opacity-60">{d.outside ? money(d.outside) : '—'}</td>
                   <td className={`p-2 tabular-nums font-bold ${d.over ? 'text-red-400' : 'text-emerald-500'}`}>{money(d.remaining)}</td>
                   <td className="p-2 tabular-nums opacity-60">{d.count}</td>
                   <td className="p-2 text-xs opacity-50">{d.closed ? T('Closed', 'مغلق') : T('Open', 'مفتوح')}</td>
                 </tr>
               ))}
-              {!days.length && <tr><td colSpan="6" className="p-6 text-center opacity-50">{T('Open the first cash box above.', 'افتح أول صندوق من الأعلى.')}</td></tr>}
+              {!days.length && <tr><td colSpan="7" className="p-6 text-center opacity-50">{T('Open the first cash box above.', 'افتح أول صندوق من الأعلى.')}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -671,13 +762,18 @@ const TABS = [
   ['sales', Receipt, 'Sales', 'المبيعات'],
   ['purchases', ShoppingCart, 'Purchases', 'المشتريات'],
   ['cash', Banknote, 'Pocket money', 'نقد المصروف'],
+  ['directory', BookUser, 'Directory', 'العملاء والموردون'],
 ];
 
 export default function Accounting({ onNav }) {
-  const { T, invoices, quotes, purchases, cash, rates } = useApp();
+  const { T, invoices, quotes, purchases, cash, rates, customers, suppliers } = useApp();
   const [tab, setTab] = useState('overview');
   const s = useMemo(() => accountingSummary({ invoices, quotes, purchases, cash, rates }), [invoices, quotes, purchases, cash, rates]);
-  const count = (k) => (k === 'sales' ? s.invoiceCount : k === 'purchases' ? s.purchaseCount : k === 'cash' ? s.pettyDays : null);
+  const count = (k) => (k === 'sales' ? s.invoiceCount
+    : k === 'purchases' ? s.purchaseCount
+      : k === 'cash' ? s.pettyDays
+        : k === 'directory' ? (customers || []).length + (suppliers || []).length
+          : null);
 
   return (
     <div>
@@ -702,6 +798,7 @@ export default function Accounting({ onNav }) {
       {tab === 'sales' && <Sales s={s} onNav={onNav} />}
       {tab === 'purchases' && <Purchases s={s} />}
       {tab === 'cash' && <PocketMoney s={s} />}
+      {tab === 'directory' && <Directory />}
     </div>
   );
 }

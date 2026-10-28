@@ -13,6 +13,7 @@
  *    `expenses[]` = what went out during the day, remainder carries to the next day
  */
 import { safeTotals, invoiceView, todayStr, parseDay } from './adminStats.js';
+import { PAY_SOURCES, isCash, isPartner } from './directory.js';
 
 const DAY = 86400000;
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -85,11 +86,20 @@ export function purchaseView(p = {}, vatRate = 0, today = todayStr()) {
   };
 }
 
-/** One day of petty cash: handed over, spent, left. Negative remainder = overspent. */
+/**
+ * One day of petty cash: handed over, spent, left. Negative remainder = overspent.
+ *
+ * Only expenses paid **from the box** (`paidBy: 'cash'`, the default) reduce the
+ * remainder. An expense settled by the company account or by a partner is still
+ * logged — it is a real cost — but it never eats the cash that was handed over;
+ * it is reported separately as `outside` so the day reads honestly.
+ */
 export function cashView(d = {}) {
   const open = Math.max(0, Number(d.open || 0));
   const expenses = Array.isArray(d.expenses) ? d.expenses : [];
-  const spent = r2(expenses.reduce((s, e) => s + Number(e && e.amount ? e.amount : 0), 0));
+  const of = (cash) => r2(expenses.filter((e) => isCash(e.paidBy) === cash).reduce((s, e) => s + Number(e && e.amount ? e.amount : 0), 0));
+  const spent = of(true);
+  const outside = of(false);
   const remaining = r2(open - spent);
   return {
     d,
@@ -98,6 +108,8 @@ export function cashView(d = {}) {
     open: r2(open),
     expenses,
     spent,
+    outside,
+    total: r2(spent + outside),
     remaining,
     count: expenses.length,
     over: remaining < -0.005,
@@ -165,9 +177,11 @@ export function accountingSummary({
   const latePurchases = pur.filter((v) => v.overdue);
   const payablesOverdue = sum(latePurchases, 'balance');
 
-  /* ---- petty cash ---- */
+  /* ---- daily expenses: pocket money, company account and partners alike ---- */
   const days = (cash || []).map(cashView).sort((a, b) => a.date.localeCompare(b.date));
-  const petty = sum(days, 'spent');
+  const pettyCash = sum(days, 'spent');
+  const pettyOutside = sum(days, 'outside');
+  const petty = r2(pettyCash + pettyOutside);
   const latest = days.length ? days[days.length - 1] : null;
   const cashOnHand = latest ? latest.remaining : 0;
   const pettyByCat = CASH_CATS.map(([key, en, ar]) => {
@@ -180,6 +194,17 @@ export function accountingSummary({
     }));
     return { key, en, ar, value: r2(value), count };
   }).filter((c) => c.count);
+
+  /* ---- who actually paid (cash box, company account, each partner) ---- */
+  const payerTotals = {};
+  const addPayer = (id, value) => { const k = id || 'company'; payerTotals[k] = (payerTotals[k] || 0) + Number(value || 0); };
+  days.forEach((d) => d.expenses.forEach((e) => addPayer(e.paidBy || 'cash', e.amount)));
+  pur.forEach((v) => { if (Number(v.p.paid || 0) > 0) addPayer(v.p.paidBy || 'company', v.p.paid); });
+  const byPayer = PAY_SOURCES
+    .map((p) => ({ ...p, value: r2(payerTotals[p.id] || 0) }))
+    .filter((p) => p.value > 0);
+  const partnerOut = r2(byPayer.filter((p) => isPartner(p.id)).reduce((s, p) => s + p.value, 0));
+  const paidByCompany = r2(payerTotals.company || 0);
 
   /* ---- result ---- */
   const grossProfit = r2(salesNet - purchasesNet);
@@ -254,8 +279,10 @@ export function accountingSummary({
     /* purchases */
     purchasesNet, purchasesVat, purchasesGross, supplierPaid, payables, payablesOverdue,
     purchaseCount: pur.length, latePurchaseCount: latePurchases.length,
-    /* petty cash */
-    petty, pettyDays: days.length, cashOnHand, latestDay: latest, pettyByCat,
+    /* daily expenses */
+    petty, pettyCash, pettyOutside, pettyDays: days.length, cashOnHand, latestDay: latest, pettyByCat,
+    /* who paid */
+    byPayer, partnerOut, paidByCompany,
     /* result */
     grossProfit, netProfit, vatDue, margin,
     /* breakdowns */

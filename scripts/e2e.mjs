@@ -50,8 +50,8 @@ const sv = svs.find((s) => s.id === r2.b.surveyId);
 ok(sv && sv.clientId === by('Site Survey').id && sv.address === 'Abdoun, Amman' && sv.status === 'new', 'survey linked to lead');
 
 console.log('Accounting books (purchases + petty cash)');
-const pur = { id: 'e2e-pur', no: 'PUR-E2E-001', date: '2026-03-01', due: '2026-03-31', supplier: 'E2E Supplier', cat: 'materials', amount: 40, vat: true, vatRate: 16, paid: 0 };
-const day = { id: 'e2e-cash', date: '2026-03-01', open: 100, closed: false, expenses: [{ id: 'e2e-e1', label: 'E2E tape', amount: 12.5, cat: 'supplies' }] };
+const pur = { id: 'e2e-pur', no: 'PUR-E2E-001', date: '2026-03-01', due: '2026-03-31', supplier: 'E2E Supplier', supplierId: 'e2e-sup', cat: 'materials', amount: 40, vat: true, vatRate: 16, paid: 0, paidBy: 'partner:malek', method: 'transfer' };
+const day = { id: 'e2e-cash', date: '2026-03-01', open: 100, closed: false, expenses: [{ id: 'e2e-e1', label: 'E2E tape', amount: 12.5, cat: 'supplies', paidBy: 'cash' }, { id: 'e2e-e2', label: 'E2E courier', amount: 7, cat: 'transport', paidBy: 'company' }] };
 ok((await j('/api/c/purchases', { method: 'PUT', body: JSON.stringify({ rows: [] }) })).s === 401, 'purchases write needs admin');
 ok((await j('/api/c/cash', { method: 'PUT', body: JSON.stringify({ rows: [] }) })).s === 401, 'petty cash write needs admin');
 const putP = await j('/api/c/purchases', { method: 'PUT', headers: A, body: JSON.stringify({ rows: [{ id: pur.id, data: pur }] }) });
@@ -60,8 +60,24 @@ ok(putP.s === 200 && putC.s === 200, 'supplier bill + cash day saved');
 const gotP = (await j('/api/c/purchases', { headers: A })).b.map((x) => x.data).find((x) => x.id === pur.id);
 const gotC = (await j('/api/c/cash', { headers: A })).b.map((x) => x.data).find((x) => x.id === day.id);
 ok(gotP?.amount === 40 && gotP?.supplier === 'E2E Supplier' && gotP?.vatRate === 16, 'purchase round-tripped intact');
-ok(gotC?.open === 100 && gotC?.expenses?.length === 1 && gotC.expenses[0].amount === 12.5, 'petty cash day round-tripped with its expenses');
+ok(gotP?.paidBy === 'partner:malek' && gotP?.supplierId === 'e2e-sup', 'supplier bill keeps the payer (partner) and the supplier record');
+ok(gotC?.open === 100 && gotC?.expenses?.length === 2 && gotC.expenses[0].amount === 12.5, 'petty cash day round-tripped with its expenses');
+ok(gotC?.expenses?.[0]?.paidBy === 'cash' && gotC?.expenses?.[1]?.paidBy === 'company', 'each expense keeps who paid it (box vs company)');
 ok((await j('/api/c/nope', { headers: A })).s === 404, 'unknown collection rejected');
+
+console.log('Customers & suppliers directory');
+const cus = { id: 'e2e-cus', name: 'E2E Client Co', tax: '12345', address: 'Amman', notes: '', phone: '+962 79 000 0000', email: 'e2e@client.test', contact: { name: 'E2E Contact', role: 'Manager', phone: '0790000000', email: 'e2e@client.test' } };
+const sup = { id: 'e2e-sup', name: 'E2E Supply Co', tax: '', address: 'Zarqa', notes: '', phone: '0791111111', email: '', contact: { name: 'E2E Sales', role: '', phone: '', email: 'e2e@supply.test' } };
+ok((await j('/api/c/customers', { method: 'PUT', body: JSON.stringify({ rows: [] }) })).s === 401, 'customers write needs admin');
+ok((await j('/api/c/suppliers', { method: 'PUT', body: JSON.stringify({ rows: [] }) })).s === 401, 'suppliers write needs admin');
+const putCu = await j('/api/c/customers', { method: 'PUT', headers: A, body: JSON.stringify({ rows: [{ id: cus.id, data: cus }] }) });
+const putSu = await j('/api/c/suppliers', { method: 'PUT', headers: A, body: JSON.stringify({ rows: [{ id: sup.id, data: sup }] }) });
+ok(putCu.s === 200 && putSu.s === 200, 'customer + supplier saved');
+const gotCu = (await j('/api/c/customers', { headers: A })).b.map((x) => x.data).find((x) => x.id === cus.id);
+const gotSu = (await j('/api/c/suppliers', { headers: A })).b.map((x) => x.data).find((x) => x.id === sup.id);
+ok(gotCu?.name === 'E2E Client Co' && gotCu?.contact?.name === 'E2E Contact' && gotCu?.contact?.role === 'Manager', 'customer round-tripped with its Contact tab');
+ok(gotCu?.phone === '+962 79 000 0000' && gotCu?.email === 'e2e@client.test', 'customer phone/e-mail kept verbatim (dedupe normalises at the UI)');
+ok(gotSu?.name === 'E2E Supply Co' && gotSu?.contact?.name === 'E2E Sales' && gotSu?.address === 'Zarqa', 'supplier round-tripped with its Contact tab');
 
 console.log('Security');
 const h = (await fetch(BASE + '/')).headers;
@@ -87,5 +103,7 @@ await del('orders', orders.filter((o) => leads.find((l) => l.id === o.clientId)?
 await del('surveys', svs.filter((s) => leads.find((l) => l.id === s.clientId)?.name.startsWith('E2E')));
 await del('purchases', [pur]);
 await del('cash', [day]);
+await del('customers', [cus]);
+await del('suppliers', [sup]);
 console.log(fail ? `\n${fail} check(s) FAILED` : '\nAll checks passed');
 process.exit(fail ? 1 : 0);

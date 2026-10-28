@@ -400,13 +400,13 @@ function Multipliers() {
 }
 
 function Pricing() {
-  const { T, rates, upd, resetAll, leads, quotes, orders, invoices, surveys, purchases, cash, content, company } = useApp();
+  const { T, rates, upd, resetAll, leads, quotes, orders, invoices, surveys, purchases, cash, customers, suppliers, content, company } = useApp();
   const [g, setG] = useState('area');
   const [q, setQ] = useState('');
   const cur = PRICE_GROUPS.find((x) => x[0] === g) || PRICE_GROUPS[0];
   const count = (key) => Object.keys(rates[key] || {}).length;
   const exportData = () => {
-    const data = JSON.stringify({ version: 3, rates, content, company, leads, quotes, orders, invoices, surveys, purchases, cash }, null, 1);
+    const data = JSON.stringify({ version: 4, rates, content, company, leads, quotes, orders, invoices, surveys, purchases, cash, customers, suppliers }, null, 1);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
     a.download = `artspace-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -421,7 +421,7 @@ function Pricing() {
         if (!d || typeof d !== 'object' || !d.rates) throw new Error('bad');
         if (!confirm(T('Replace current data with this backup?', 'استبدال البيانات الحالية بهذه النسخة؟'))) return;
         const pick = {};
-        ['rates', 'content', 'company', 'leads', 'quotes', 'orders', 'invoices', 'surveys', 'purchases', 'cash'].forEach((k) => { if (d[k]) pick[k] = d[k]; });
+        ['rates', 'content', 'company', 'leads', 'quotes', 'orders', 'invoices', 'surveys', 'purchases', 'cash', 'customers', 'suppliers'].forEach((k) => { if (d[k]) pick[k] = d[k]; });
         upd(pick);
       } catch { alert(T('Invalid backup file', 'ملف نسخة احتياطية غير صالح')); }
     });

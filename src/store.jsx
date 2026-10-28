@@ -101,7 +101,7 @@ export const SURVEY_STATUS = [
   ['done', 'Completed', 'منجز'],
   ['cancelled', 'Cancelled', 'ملغي'],
 ];
-const COLLECTIONS = ['leads', 'quotes', 'orders', 'invoices', 'surveys', 'purchases', 'cash'];
+const COLLECTIONS = ['leads', 'quotes', 'orders', 'invoices', 'surveys', 'purchases', 'cash', 'customers', 'suppliers'];
 const SETTINGS_KEYS = ['rates', 'content', 'company'];
 /** State slices that live on the server. Used for change tracking so a save only sends what changed. */
 const SYNCABLE = [...SETTINGS_KEYS, ...COLLECTIONS];
@@ -187,10 +187,10 @@ const load = () => {
     const s = JSON.parse(localStorage.getItem(KEY));
     if (s) {
       const { adminPass, ...rest } = s; // never keep a password in client state
-      return { ...rest, auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], rates: migrateRates(s.rates), content: { ...DEFAULT_CONTENT, ...(s.content || {}) }, company: { ...DEFAULT_COMPANY, ...(s.company || {}) } };
+      return { ...rest, auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], customers: [], suppliers: [], rates: migrateRates(s.rates), content: { ...DEFAULT_CONTENT, ...(s.content || {}) }, company: { ...DEFAULT_COMPANY, ...(s.company || {}) } };
     }
   } catch {}
-  return { lang: 'ar', dark: true, mode: 'site', auth: false, rates: DEFAULT_RATES, content: DEFAULT_CONTENT, company: DEFAULT_COMPANY, cart: [], leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [] };
+  return { lang: 'ar', dark: true, mode: 'site', auth: false, rates: DEFAULT_RATES, content: DEFAULT_CONTENT, company: DEFAULT_COMPANY, cart: [], leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], customers: [], suppliers: [] };
 };
 
 const Ctx = createContext();
@@ -203,7 +203,7 @@ export function Provider({ children }) {
   const dirty = useRef(new Set());
   useEffect(() => {
     // Private business data lives on the server only — never persist it in the visitor's browser.
-    const { leads, quotes, orders, invoices, surveys, purchases, cash, auth, ...pub } = s;
+    const { leads, quotes, orders, invoices, surveys, purchases, cash, customers, suppliers, auth, ...pub } = s;
     localStorage.setItem(KEY, JSON.stringify(pub));
     document.documentElement.dir = s.lang === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = s.lang;
@@ -242,7 +242,7 @@ export function Provider({ children }) {
     };
     sb.auth.getSession().then(({ data }) => { applyServer({ auth: !!data.session }); pull(!!data.session); });
     const { data: sub } = sb.auth.onAuthStateChange((_e, sess) => {
-      applyServer(sess ? { auth: true } : { auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [] });
+      applyServer(sess ? { auth: true } : { auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], customers: [], suppliers: [] });
       pull(!!sess);
     });
     return () => sub.subscription.unsubscribe();
@@ -252,7 +252,7 @@ export function Provider({ children }) {
   useEffect(() => {
     if (!s.auth) return undefined;
     const id = setInterval(async () => {
-      for (const t of ['leads', 'quotes', 'orders', 'surveys', 'purchases', 'cash']) {
+      for (const t of ['leads', 'quotes', 'orders', 'surveys', 'purchases', 'cash', 'customers', 'suppliers']) {
         const { data } = await sb.from(t).select('data');
         if (!data) continue;
         setS((o) => {
@@ -327,8 +327,8 @@ export function Provider({ children }) {
     const oid = existing?.id || uid('o');
     const orders = existing
       ? o.orders.map((x) => (x.id === oid ? { ...x, stage: 'brief', total: t.total } : x))
-      : [{ id: oid, quoteId: qid, clientId: q.clientId, title: q.no, stage: 'brief', date: q.date, total: t.total }, ...o.orders];
-    const inv = { id: uid('inv'), no: `INV-2026-${String(o.invoices.length + 1).padStart(3, '0')}`, orderId: oid, clientId: q.clientId, date: new Date().toISOString().slice(0, 10), vat: q.vat, vatRate: o.rates.vat, discount: q.discount, items: q.items, payments: [] };
+      : [{ id: oid, quoteId: qid, clientId: q.clientId, customerId: q.customerId || '', title: q.no, stage: 'brief', date: q.date, total: t.total }, ...o.orders];
+    const inv = { id: uid('inv'), no: `INV-2026-${String(o.invoices.length + 1).padStart(3, '0')}`, orderId: oid, clientId: q.clientId, customerId: q.customerId || '', date: new Date().toISOString().slice(0, 10), vat: q.vat, vatRate: o.rates.vat, discount: q.discount, items: q.items, payments: [] };
     return {
       orders, invoices: [inv, ...o.invoices],
       quotes: o.quotes.map((x) => (x.id === qid ? { ...x, converted: true } : x)),

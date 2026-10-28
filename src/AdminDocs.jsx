@@ -5,6 +5,8 @@ import { Doc, renderPdf, StylePicker } from './Documents.jsx';
 import { sb, serverHealth } from './api.js';
 import { Modal, Stat, Badge, FileLink, Field, stageName } from './ui.jsx';
 import { addDays, dueOf, invoiceView, todayStr } from './adminStats.js';
+import { clientOf } from './directory.js';
+import { EntityPicker } from './Directory.jsx';
 
 const DEPTS = [['signage', 'Signage', 'آرمات'], ['booths', 'Booths', 'بوثات'], ['printing', 'Printing', 'مطبوعات'], ['social', 'Social', 'سوشيال'], ['marketing', 'Strategy', 'استشارات']];
 // Local calendar date (UTC serialisation would date a document "yesterday" before 03:00 in Amman).
@@ -160,16 +162,16 @@ function PdfBar({ kind, doc, client, dl, setDl, onSent }) {
 
 /* ================= Quotations ================= */
 export function Quotes() {
-  const { T, lang, quotes, leads, upd, money, rates, convertQuote, company, addLead } = useApp();
+  const { T, lang, quotes, leads, customers, upd, money, rates, convertQuote, company, addLead } = useApp();
   const [id, setId] = useState(null);
   const [mode, setMode] = useState('edit');
   const [dl, setDl] = useState(lang);
   const [creating, setCreating] = useState(false);
-  const [nc, setNc] = useState({ clientId: '', name: '', company: '', phone: '', email: '' });
+  const [nc, setNc] = useState({ customerId: '' });
   const q = quotes.find((x) => x.id === id);
-  const client = q && leads.find((l) => l.id === q.clientId);
+  const client = q && clientOf(q, customers, leads);
+  const clientName = (doc) => { const c = clientOf(doc, customers, leads); return c ? [c.company, c.name].filter(Boolean).join(' · ') : ''; };
   const patch = (p) => upd((o) => ({ quotes: o.quotes.map((x) => (x.id === id ? { ...x, ...p } : x)) }));
-  const patchClient = (p) => upd((o) => ({ leads: o.leads.map((l) => (l.id === q.clientId ? { ...l, ...p } : l)) }));
   const setStatus = (status) => {
     patch({ status });
     upd((o) => ({ leads: o.leads.map((l) => {
@@ -183,14 +185,10 @@ export function Quotes() {
   const open = (qid, m = 'edit') => { setId(qid); setMode(m); };
   const create = (e) => {
     e.preventDefault();
-    let cid = nc.clientId;
-    if (!cid) {
-      cid = uid('c');
-      upd((o) => ({ leads: [{ id: cid, stage: 'new', date: today(), tax: '', source: 'Manual', notes: '', name: nc.name, company: nc.company, phone: nc.phone, email: nc.email }, ...o.leads] }));
-    }
-    const nq = { id: uid('q'), no: nextNo(quotes, 'Q'), clientId: cid, status: 'draft', discount: 0, vat: true, date: today(), notes: '', validDays: 14, items: [] };
+    const c = customers.find((x) => x.id === nc.customerId);
+    const nq = { id: uid('q'), no: nextNo(quotes, 'Q'), customerId: c?.id || '', clientId: c?.leadId || '', status: 'draft', discount: 0, vat: true, date: today(), notes: '', validDays: 14, items: [] };
     upd((o) => ({ quotes: [nq, ...o.quotes] }));
-    setCreating(false); setNc({ clientId: '', name: '', company: '', phone: '', email: '' }); open(nq.id);
+    setCreating(false); setNc({ customerId: '' }); open(nq.id);
   };
   const duplicate = () => {
     const nq = { ...q, id: uid('q'), no: nextNo(quotes, 'Q'), status: 'draft', converted: false, date: today(), file: undefined, filePath: undefined, items: q.items.map((i) => ({ ...i, id: uid('i') })) };
@@ -205,25 +203,20 @@ export function Quotes() {
       <div className="glass overflow-auto">
         <table className="w-full text-sm"><thead className="text-xs opacity-60"><tr>{['#', T('Client', 'العميل'), T('Date', 'التاريخ'), T('Total', 'الإجمالي'), T('Status', 'الحالة')].map((h) => <th key={h} className="p-3 text-start">{h}</th>)}</tr></thead>
           <tbody>{quotes.map((x) => <tr key={x.id} onClick={() => open(x.id)} className="border-t border-black/5 dark:border-white/10 cursor-pointer hover:bg-gold/5">
-            <td className="p-3 font-semibold">{x.no}</td><td className="p-3">{leads.find((l) => l.id === x.clientId)?.name}</td><td className="p-3">{x.date}</td><td className="p-3">{money(totals({ ...x }, rates.vat).total)}</td>
+            <td className="p-3 font-semibold">{x.no}</td><td className="p-3">{clientName(x) || '—'}</td><td className="p-3">{x.date}</td><td className="p-3">{money(totals({ ...x }, rates.vat).total)}</td>
             <td className="p-3"><Badge id={x.status}>{stageName(QUOTE_STATUS, x.status, lang)}</Badge>{x.converted && <span className="ms-2 text-xs text-emerald-500">✓ {T('Converted', 'محوّل')}</span>}</td></tr>)}
             {!quotes.length && <tr><td colSpan="5" className="p-6 text-center opacity-60">{T('No quotations yet.', 'لا توجد عروض أسعار.')}</td></tr>}</tbody></table>
       </div>
 
       {creating && <Modal title={T('New quotation', 'عرض سعر جديد')} onClose={() => setCreating(false)}>
         <form onSubmit={create} className="space-y-3">
-          <div><label className="label">{T('Existing client', 'عميل موجود')}</label><select className="input" value={nc.clientId} onChange={(e) => setNc({ ...nc, clientId: e.target.value })}><option value="">{T('— New client —', '— عميل جديد —')}</option>{leads.map((l) => <option key={l.id} value={l.id}>{l.name} {l.company && `· ${l.company}`}</option>)}</select></div>
-          {!nc.clientId && <div className="grid grid-cols-2 gap-3">
-            <Field label={T('Name', 'الاسم')} v={nc.name} on={(name) => setNc({ ...nc, name })} required />
-            <Field label={T('Company', 'الشركة')} v={nc.company} on={(c) => setNc({ ...nc, company: c })} />
-            <Field label={T('Phone', 'الهاتف')} v={nc.phone} on={(phone) => setNc({ ...nc, phone })} dir="ltr" />
-            <Field label={T('Email', 'البريد')} v={nc.email} on={(email) => setNc({ ...nc, email })} dir="ltr" />
-          </div>}
-          <button className="btn-gold w-full">{T('Create & edit', 'إنشاء وتحرير')}</button>
+          <EntityPicker kind="customer" label={T('Customer', 'العميل')} value={nc.customerId} onPick={(c) => setNc({ customerId: c ? c.id : '' })} placeholder={T('Search a saved customer, or add a new company…', 'ابحث عن عميل محفوظ أو أضف شركة جديدة…')} />
+          <p className="text-xs opacity-60">{T('Customers are stored in Finance › Directory, so the next document picks them in one click.', 'يُحفظ العميل في المالية › العملاء والموردون، فيظهر في المستند التالي بنقرة واحدة.')}</p>
+          <button className="btn-gold w-full" disabled={!nc.customerId}>{T('Create & edit', 'إنشاء وتحرير')}</button>
         </form>
       </Modal>}
 
-      {q && <Modal xwide title={`${q.no} — ${client?.name || ''}`} onClose={() => setId(null)}>
+      {q && <Modal xwide title={`${q.no} — ${clientName(q)}`} onClose={() => setId(null)}>
         <div className="flex gap-2 mb-4 no-print flex-wrap">
           <button className={`btn ${mode === 'edit' ? 'bg-gold text-ink' : 'btn-ghost'}`} onClick={() => setMode('edit')}><Pencil size={15} />{T('Edit', 'تحرير')}</button>
           <button className={`btn ${mode === 'pdf' ? 'bg-gold text-ink' : 'btn-ghost'}`} onClick={() => setMode('pdf')}><Eye size={15} />{T('PDF & Email', 'PDF والبريد')}</button>
@@ -236,11 +229,9 @@ export function Quotes() {
         </> : <div className="space-y-5">
           {lock && <p className="text-xs text-amber-500">{T('Converted to an order — items are locked.', 'تم تحويله لطلب — البنود مقفلة.')}</p>}
           {q.file && <FileLink name={q.file} path={q.filePath} />}
-          <div className="grid sm:grid-cols-4 gap-3">
-            <Field label={T('Client name', 'اسم العميل')} v={client?.name} on={(name) => patchClient({ name })} />
-            <Field label={T('Company', 'الشركة')} v={client?.company} on={(c) => patchClient({ company: c })} />
-            <Field label={T('Phone', 'الهاتف')} v={client?.phone} on={(phone) => patchClient({ phone })} dir="ltr" />
-            <Field label={T('Email', 'البريد')} v={client?.email} on={(email) => patchClient({ email })} dir="ltr" />
+          <div className="space-y-2">
+            <EntityPicker kind="customer" label={T('Customer', 'العميل')} value={q.customerId || ''} nameFallback={client?.name || ''} onPick={(c) => patch({ customerId: c ? c.id : '', clientId: c ? c.leadId || q.clientId || '' : q.clientId || '' })} />
+            {client && <p className="text-xs opacity-60">{client.company && `${client.company} · `}{client.phone && <span dir="ltr">{client.phone}</span>}{client.phone && client.email && ' · '}{client.email && <span dir="ltr">{client.email}</span>}{client.tax && ` · ${T('Tax no.', 'الرقم الضريبي')} ${client.tax}`}</p>}
           </div>
           <ItemsEditor items={q.items} disabled={lock} onChange={(items) => patch({ items })} />
           <div className="grid sm:grid-cols-4 gap-3 items-end">
@@ -307,14 +298,15 @@ export function Orders() {
 
 /* ================= Invoices ================= */
 export function Invoices() {
-  const { T, lang, invoices, leads, rates, money, upd, company } = useApp();
+  const { T, lang, invoices, leads, customers, rates, money, upd, company } = useApp();
   const [id, setId] = useState(null);
   const [mode, setMode] = useState('edit');
   const [dl, setDl] = useState(lang);
   const [pay, setPay] = useState({ label: '', amount: '' });
-  const [creating, setCreating] = useState('');
+  const [creating, setCreating] = useState(null); // null = closed, '' = open with nothing picked yet
   const inv = invoices.find((i) => i.id === id);
-  const client = inv && leads.find((l) => l.id === inv.clientId);
+  const client = inv && clientOf(inv, customers, leads);
+  const clientName = (doc) => { const c = clientOf(doc, customers, leads); return c ? [c.company, c.name].filter(Boolean).join(' · ') : ''; };
   const paidOf = (i) => i.payments.reduce((s, p) => s + Number(p.amount), 0);
   const patch = (p) => upd((o) => ({ invoices: o.invoices.map((i) => (i.id === id ? { ...i, ...p } : i)) }));
   const addPay = (e) => {
@@ -324,24 +316,35 @@ export function Invoices() {
   };
   const create = (e) => {
     e.preventDefault();
-    const ni = { id: uid('inv'), no: nextNo(invoices, 'INV'), clientId: creating, date: today(), due: addDays(today(), 30), vat: true, vatRate: rates.vat, discount: 0, items: [], payments: [] };
-    upd((o) => ({ invoices: [ni, ...o.invoices] })); setCreating(''); setId(ni.id); setMode('edit');
+    const c = customers.find((x) => x.id === creating);
+    const ni = { id: uid('inv'), no: nextNo(invoices, 'INV'), customerId: c?.id || '', clientId: c?.leadId || '', date: today(), due: addDays(today(), 30), vat: true, vatRate: rates.vat, discount: 0, items: [], payments: [] };
+    upd((o) => ({ invoices: [ni, ...o.invoices] })); setCreating(null); setId(ni.id); setMode('edit');
   };
   const remove = () => { if (confirm(T('Delete this invoice?', 'حذف الفاتورة؟'))) { upd((o) => ({ invoices: o.invoices.filter((i) => i.id !== id) })); setId(null); } };
   const presets = [T('Down Payment / عربون', 'عربون / Down Payment'), T('Milestone / دفعة مرحلية', 'دفعة مرحلية / Milestone'), T('Delivery / دفعة تسليم', 'دفعة تسليم / Delivery')];
   const t = inv && totals(inv, rates.vat);
   return (
     <div>
-      <div className="flex mb-4"><button className="btn-terra ms-auto" onClick={() => setCreating(leads[0]?.id || 'x')}><Plus size={15} />{T('New invoice', 'فاتورة جديدة')}</button></div>
+      <div className="flex mb-4"><button className="btn-terra ms-auto" onClick={() => setCreating('')}><Plus size={15} />{T('New invoice', 'فاتورة جديدة')}</button></div>
       <div className="glass overflow-auto">
         <table className="w-full text-sm"><thead className="text-xs opacity-60"><tr>{['#', T('Client', 'العميل'), T('Total', 'الإجمالي'), T('Paid', 'المدفوع'), T('Remaining', 'المتبقي'), T('Due', 'الاستحقاق')].map((h) => <th key={h} className="p-3 text-start">{h}</th>)}</tr></thead>
-          <tbody>{invoices.map((i) => { const v = invoiceView(i, rates.vat); return <tr key={i.id} onClick={() => { setId(i.id); setMode('edit'); }} className="border-t border-black/5 dark:border-white/10 cursor-pointer hover:bg-gold/5"><td className="p-3 font-semibold">{i.no}</td><td className="p-3">{leads.find((l) => l.id === i.clientId)?.name}</td><td className="p-3">{money(v.total)}</td><td className="p-3 text-emerald-500">{money(v.paid)}</td><td className="p-3 text-terra font-bold">{money(v.balance)}</td><td className="p-3 text-xs whitespace-nowrap">{v.overdue ? <span className="badge bg-red-500/15 text-red-400">{v.late} {T('days late', 'يوم تأخير')}</span> : <span className="opacity-60" dir="ltr">{v.due}</span>}</td></tr>; })}
+          <tbody>{invoices.map((i) => { const v = invoiceView(i, rates.vat); return (
+            <tr key={i.id} onClick={() => { setId(i.id); setMode('edit'); }} className="border-t border-black/5 dark:border-white/10 cursor-pointer hover:bg-gold/5">
+              <td className="p-3 font-semibold">{i.no}</td>
+              <td className="p-3">{clientName(i) || '—'}</td>
+              <td className="p-3">{money(v.total)}</td>
+              <td className="p-3 text-emerald-500">{money(v.paid)}</td>
+              <td className="p-3 text-terra font-bold">{money(v.balance)}</td>
+              <td className="p-3 text-xs whitespace-nowrap">{v.overdue ? <span className="badge bg-red-500/15 text-red-400">{v.late} {T('days late', 'يوم تأخير')}</span> : <span className="opacity-60" dir="ltr">{v.due}</span>}</td>
+            </tr>
+          ); })}
             {!invoices.length && <tr><td colSpan="6" className="p-6 text-center opacity-60">{T('Create an invoice or convert an approved quotation.', 'أنشئ فاتورة أو حوّل عرضاً معتمداً.')}</td></tr>}</tbody></table>
       </div>
-      {creating && <Modal title={T('New invoice', 'فاتورة جديدة')} onClose={() => setCreating('')}>
-        <form onSubmit={create} className="space-y-3"><label className="label">{T('Client', 'العميل')}</label>
-          <select className="input" value={creating} onChange={(e) => setCreating(e.target.value)}>{leads.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
-          <button className="btn-gold w-full" disabled={!leads.length}>{T('Create', 'إنشاء')}</button></form></Modal>}
+      {creating !== null && <Modal title={T('New invoice', 'فاتورة جديدة')} onClose={() => setCreating(null)}>
+        <form onSubmit={create} className="space-y-3">
+          <EntityPicker kind="customer" label={T('Customer', 'العميل')} value={creating} onPick={(c) => setCreating(c ? c.id : '')} placeholder={T('Search a saved customer, or add a new company…', 'ابحث عن عميل محفوظ أو أضف شركة جديدة…')} />
+          <p className="text-xs opacity-60">{T('Customers are stored in Finance › Directory, so the next document picks them in one click.', 'يُحفظ العميل في المالية › العملاء والموردون، فيظهر في المستند التالي بنقرة واحدة.')}</p>
+          <button className="btn-gold w-full" disabled={!creating}>{T('Create', 'إنشاء')}</button></form></Modal>}
       {inv && <Modal xwide title={inv.no} onClose={() => setId(null)}>
         <div className="flex gap-2 mb-4 no-print flex-wrap">
           <button className={`btn ${mode === 'edit' ? 'bg-gold text-ink' : 'btn-ghost'}`} onClick={() => setMode('edit')}><Pencil size={15} />{T('Edit', 'تحرير')}</button>
@@ -353,6 +356,7 @@ export function Invoices() {
           <PdfBar kind="invoice" doc={{ ...inv, vatRate: inv.vatRate ?? rates.vat }} client={client} dl={dl} setDl={setDl} />
           <FitDoc kind="invoice" dl={dl} doc={{ ...inv, vatRate: inv.vatRate ?? rates.vat }} client={client} company={company} />
         </> : <div className="space-y-5">
+          <EntityPicker kind="customer" label={T('Customer', 'العميل')} value={inv.customerId || ''} nameFallback={client?.name || ''} onPick={(c) => patch({ customerId: c ? c.id : '', clientId: c ? c.leadId || inv.clientId || '' : inv.clientId || '' })} />
           <ItemsEditor items={inv.items} onChange={(items) => patch({ items })} />
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
             <Field label={T('Date', 'التاريخ')} type="date" v={inv.date} on={(date) => patch({ date })} />
