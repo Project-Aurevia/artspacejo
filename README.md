@@ -43,6 +43,7 @@ or still one of the shipped placeholders (`artspace2026`, `CHANGE-ME…`).
 | Env | Purpose |
 |---|---|
 | `ADMIN_PASSWORD` | admin login (required in production) |
+| `ADMIN_EMAIL` | optional; when set, sign-in needs this email as well as the password |
 | `PORT`, `HOST` | default `3000` and `127.0.0.1` (loopback in dev too; set `HOST=0.0.0.0` to expose) |
 | `SITE_URL` | public URL for canonical / sitemap / robots / Open Graph images |
 | `DATA_DIR` | database + uploads folder (default `./data`) |
@@ -77,6 +78,9 @@ Admin saves are tracked per slice (`rates`, `content`, `company`, `leads`, `quot
 never overwrites a concurrent website submission with a stale copy.
 
 ## Admin
+Sign-in is the password alone, or email + password when `ADMIN_EMAIL` is set (the form always shows the
+email field; it is ignored while `ADMIN_EMAIL` is unset, which keeps local dev and CI password-only).
+
 Dashboard · CRM (kanban/table, categories) · Site Surveys · Quotations (free-form items, PDF & email) · Production ·
 Invoices · Calculator & Pricing · Website Content · Company & Quote Style (compact / bubbles / waves, colours, header & footer).
 

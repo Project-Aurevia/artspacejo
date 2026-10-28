@@ -163,13 +163,14 @@ function CRM() {
 /* ================= Login ================= */
 function Login() {
   const { T, upd } = useApp();
+  const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
-    const { error } = await sb.auth.signInWithPassword({ password: pw });
+    const { error } = await sb.auth.signInWithPassword({ email, password: pw });
     setBusy(false);
     if (error) setErr(error.status === 429 ? T('Too many attempts. Try again in 15 minutes.', 'محاولات كثيرة. حاول بعد 15 دقيقة.') : T('Invalid credentials.', 'بيانات الدخول غير صحيحة.'));
     // onAuthStateChange sets auth on success
@@ -179,7 +180,8 @@ function Login() {
       <form onSubmit={submit} className="glass !bg-white/5 !border-white/10 p-8 w-full max-w-sm space-y-4">
         <div className="flex justify-center"><Logo className="h-12" /></div>
         <h1 className="text-center font-bold text-lg">{T('Admin Sign In', 'تسجيل دخول الإدارة')}</h1>
-        <input type="password" required autoFocus autoComplete="current-password" className="input" placeholder={T('Password', 'كلمة المرور')} value={pw} onChange={(e) => { setPw(e.target.value); setErr(''); }} />
+        <input type="email" autoComplete="username" className="input" placeholder={T('Email', 'البريد الإلكتروني')} value={email} onChange={(e) => { setEmail(e.target.value); setErr(''); }} />
+        <input type="password" required autoComplete="current-password" className="input" placeholder={T('Password', 'كلمة المرور')} value={pw} onChange={(e) => { setPw(e.target.value); setErr(''); }} />
         {err && <p className="text-xs text-red-400">{err}</p>}
         <button disabled={busy} className="btn-gold w-full">{T('Sign In', 'دخول')}</button>
         <button type="button" className="btn-ghost !border-white/20 w-full text-xs" onClick={() => location.assign('/')}>{T('Back to website', 'العودة للموقع')}</button>

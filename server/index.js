@@ -27,6 +27,8 @@ const PORT = Number(process.env.PORT || 3000);
 // HOST=0.0.0.0 to expose the port directly.
 const HOST = process.env.HOST || '127.0.0.1';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (prod ? '' : 'artspace2026');
+// When set, the admin account is (email + password). Left unset, login stays password-only.
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 // A placeholder is as dangerous as the demo password: it passes a length check but is public.
 const PLACEHOLDER = new Set(['artspace2026', 'change-me-long-and-unique', 'change-this-to-a-long-unique-password']);
 const looksPlaceholder = PLACEHOLDER.has(ADMIN_PASSWORD) || /^change[-_ ]?me/i.test(ADMIN_PASSWORD);
@@ -121,9 +123,11 @@ const uploadLimiter = rateLimit({ windowMs: 10 * 60e3, limit: 10, standardHeader
 const mailLimiter = rateLimit({ windowMs: 10 * 60e3, limit: 30, standardHeaders: true, legacyHeaders: false });
 
 api.post('/login', smallJson, loginLimiter, (req, res) => {
-  const { password = '' } = req.body || {};
-  const okPass = safeEq(password, ADMIN_PASSWORD);
-  if (okPass && ADMIN_PASSWORD) return res.json({ token: makeToken() });
+  const { email = '', password = '' } = req.body || {};
+  // Both checks run unconditionally so a wrong email costs the same time as a wrong password.
+  const okMail = !ADMIN_EMAIL || String(email).trim().toLowerCase() === ADMIN_EMAIL;
+  const okPass = safeEq(String(password), ADMIN_PASSWORD);
+  if (okMail && okPass && ADMIN_PASSWORD) return res.json({ token: makeToken() });
   res.status(401).json({ error: 'Invalid credentials' });
 });
 api.get('/session', requireAuth, (_req, res) => res.json({ ok: true }));
@@ -347,6 +351,7 @@ app.listen(PORT, HOST, () => {
   console.log(`\n  Art Space running on http://${shown}:${PORT}  (${prod ? 'production' : 'development'})`);
   console.log(`  Data folder: ${DATA}`);
   console.log(`  Email (SMTP): ${smtp ? 'enabled' : 'not configured (optional)'}`);
-  if (!prod) console.log('  ⚠ Dev mode: demo admin password in use. Production requires ADMIN_PASSWORD.');
+  console.log(`  Admin login: ${ADMIN_EMAIL ? `${ADMIN_EMAIL} + password` : 'password only (set ADMIN_EMAIL to require an email)'}`);
+  if (!prod && ADMIN_PASSWORD === 'artspace2026') console.log('  ⚠ Dev mode: demo admin password in use. Production requires ADMIN_PASSWORD.');
   console.log('');
 });
