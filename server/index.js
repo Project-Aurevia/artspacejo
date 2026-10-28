@@ -134,7 +134,7 @@ api.get('/session', requireAuth, (_req, res) => res.json({ ok: true }));
 
 // Public capability probe: the admin UI uses it to choose SMTP delivery or the mailto fallback,
 // and uptime monitors get something cheap to poll.
-api.get('/health', (_req, res) => res.json({ ok: true, mail: !!smtp, production: prod, uptime: Math.round(process.uptime()) }));
+api.get('/health', (_req, res) => res.json({ ok: true, mail: !!smtp, authEmail: !!ADMIN_EMAIL, production: prod, uptime: Math.round(process.uptime()) }));
 
 /* ----- settings (public read: rates/content/company are shown on the site; write: admin) ----- */
 api.get('/settings', (req, res) => {

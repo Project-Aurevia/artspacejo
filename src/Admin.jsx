@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Tag, Users, FileText, Hammer, Receipt, Sun, Moon, Languages, Globe, Plus, RotateCcw, Trash2, Kanban, Table2, LogOut, Download, Upload, Images, Building2, Ruler,
 } from 'lucide-react';
@@ -8,7 +8,7 @@ import CompanySettings from './AdminCompany.jsx';
 import Surveys from './AdminSurveys.jsx';
 import { Quotes, Orders, Invoices } from './AdminDocs.jsx';
 import { Modal, Stat, Badge, FileLink, Field, stageName } from './ui.jsx';
-import { sb } from './api.js';
+import { sb, serverHealth } from './api.js';
 import { useApp, totals, LEAD_STAGES, LEAD_CATS, ORDER_STAGES, QUOTE_STATUS, DEFAULT_RATES } from './store.jsx';
 
 const DEPT = { signage: '#C9A45C', printing: '#CB6B47', social: '#F0E4D6', marketing: '#7DA7A1' };
@@ -167,10 +167,19 @@ function Login() {
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  // The server decides the shape of the account: email + password, or password only.
+  const [needsEmail, setNeedsEmail] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    serverHealth().then((h) => { if (alive && h && h.ok) setNeedsEmail(!!h.authEmail); });
+    return () => { alive = false; };
+  }, []);
   const submit = async (e) => {
     e.preventDefault();
+    if (needsEmail && !email.trim()) return setErr(T('Enter the admin email.', 'أدخل بريد المسؤول.'));
+    if (!pw) return setErr(T('Enter the password.', 'أدخل كلمة المرور.'));
     setBusy(true);
-    const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+    const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password: pw });
     setBusy(false);
     if (error) setErr(error.status === 429 ? T('Too many attempts. Try again in 15 minutes.', 'محاولات كثيرة. حاول بعد 15 دقيقة.') : T('Invalid credentials.', 'بيانات الدخول غير صحيحة.'));
     // onAuthStateChange sets auth on success
@@ -180,9 +189,10 @@ function Login() {
       <form onSubmit={submit} className="glass !bg-white/5 !border-white/10 p-8 w-full max-w-sm space-y-4">
         <div className="flex justify-center"><Logo className="h-12" /></div>
         <h1 className="text-center font-bold text-lg">{T('Admin Sign In', 'تسجيل دخول الإدارة')}</h1>
-        <input type="email" autoComplete="username" className="input" placeholder={T('Email', 'البريد الإلكتروني')} value={email} onChange={(e) => { setEmail(e.target.value); setErr(''); }} />
-        <input type="password" required autoComplete="current-password" className="input" placeholder={T('Password', 'كلمة المرور')} value={pw} onChange={(e) => { setPw(e.target.value); setErr(''); }} />
+        <input type="email" required={needsEmail === true} autoFocus={needsEmail === true} autoComplete="username" className="input" placeholder={T('Email', 'البريد الإلكتروني')} value={email} onChange={(e) => { setEmail(e.target.value); setErr(''); }} />
+        <input type="password" required autoFocus={needsEmail === false} autoComplete="current-password" className="input" placeholder={T('Password', 'كلمة المرور')} value={pw} onChange={(e) => { setPw(e.target.value); setErr(''); }} />
         {err && <p className="text-xs text-red-400">{err}</p>}
+        {needsEmail === true && !err && <p className="text-[11px] text-cream/50 text-center">{T('Sign in with the admin email and password.', 'سجّل الدخول ببريد المسؤول وكلمة المرور.')}</p>}
         <button disabled={busy} className="btn-gold w-full">{T('Sign In', 'دخول')}</button>
         <button type="button" className="btn-ghost !border-white/20 w-full text-xs" onClick={() => location.assign('/')}>{T('Back to website', 'العودة للموقع')}</button>
       </form>
