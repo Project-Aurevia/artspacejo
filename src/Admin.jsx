@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Tag, Users, FileText, Hammer, Receipt, Sun, Moon, Languages, Globe, Plus, RotateCcw, Trash2, Kanban, Table2, LogOut, Download, Upload, Images, Building2, Ruler, AlertTriangle, Percent, Wallet,
+  Search, ExternalLink,
 } from 'lucide-react';
 import Logo from './Logo.jsx';
-import { CatalogGroup, ContentManager } from './AdminContent.jsx';
+import { CatalogEditor, ContentManager } from './AdminContent.jsx';
+import { signageQuote, printQuote, addonOn } from './pricing.js';
 import CompanySettings from './AdminCompany.jsx';
 import Surveys from './AdminSurveys.jsx';
 import { Quotes, Orders, Invoices } from './AdminDocs.jsx';
@@ -210,8 +212,178 @@ function Dashboard({ onNav }) {
 }
 
 /* ================= Pricing ================= */
+const PRICE_GROUPS = [
+  ['area', 'Materials', 'المواد', 'per m²', 'للمتر المربع'],
+  ['addons', 'Add-ons', 'الإضافات', 'per m² or flat', 'للمتر أو مقطوع'],
+  ['print', 'Printing', 'المطبوعات', 'per piece', 'للقطعة'],
+  ['packages', 'Social packages', 'باقات السوشيال', 'per month', 'شهرياً'],
+  ['marketing', 'Strategy', 'الاستراتيجيات', 'flat', 'مقطوع'],
+];
+const LAM_NAME = { none: ['None', 'بدون'], matt: ['Matt', 'مطفي'], gloss: ['Gloss', 'لامع'], uv: ['Spot UV', 'UV موضعي'] };
+
+const PriceRow = ({ label, value, muted }) => (
+  <div className="flex items-baseline gap-3 text-sm py-0.5">
+    <span className={`flex-1 min-w-0 truncate ${muted ? 'opacity-55' : 'opacity-80'}`}>{label}</span>
+    <span className="tabular-nums shrink-0 font-semibold">{value}</span>
+  </div>
+);
+
+/** Runs the exact same formulas as the public calculator, so the owner sees what the customer sees. */
+function PricePreview() {
+  const { T, tx, lang, money, rates } = useApp();
+  const [mode, setMode] = useState('signage');
+  const [mat, setMat] = useState('');
+  const [dim, setDim] = useState({ w: 4, h: 1 });
+  const [sel, setSel] = useState({});
+  const [pr, setPr] = useState({ item: '', size: '', paper: 350, lam: 'matt', sides: 2, qty: 500 });
+
+  const areaKeys = Object.keys(rates.area || {});
+  const printKeys = Object.keys(rates.print || {});
+  const matKey = areaKeys.includes(mat) ? mat : areaKeys[0];
+  const itKey = printKeys.includes(pr.item) ? pr.item : printKeys[0];
+  const sg = useMemo(() => signageQuote(rates, { mat: matKey, w: dim.w, h: dim.h, sel }), [rates, matKey, dim, sel]);
+  const pq = useMemo(() => printQuote(rates, { item: itKey, size: pr.size, paper: pr.paper, lam: pr.lam, sides: pr.sides, qty: pr.qty }), [rates, itKey, pr]);
+  const vat = Number(rates.vat) || 0;
+  const total = mode === 'signage' ? sg.total : pq.total;
+  const MULT = { size: T('size', 'مقاس'), paper: T('paper', 'ورق'), lam: T('finish', 'تشطيب'), sides: T('sides', 'جهات'), qty: T('qty', 'كمية') };
+  const lamName = (k) => { const n = LAM_NAME[k]; return n ? (lang === 'ar' ? n[1] : n[0]) : k; };
+
+  return (
+    <section className="glass p-5 xl:sticky xl:top-[112px]">
+      <div className="flex items-center gap-2 mb-3">
+        <h3 className="font-bold text-sm leading-tight">{T('Live customer preview', 'معاينة مباشرة كما يراها العميل')}</h3>
+        <span className="badge bg-emerald-500/15 text-emerald-500 ms-auto">{T('real-time', 'فوري')}</span>
+      </div>
+      <div className="flex gap-1 p-1 rounded-xl bg-black/5 dark:bg-white/5 mb-4">
+        {[['signage', T('Signage', 'آرمات')], ['print', T('Printing', 'مطبوعات')]].map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setMode(k)}
+            className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${mode === k ? 'bg-gold text-ink shadow-sm' : 'opacity-70 hover:opacity-100'}`}>{l}</button>
+        ))}
+      </div>
+
+      {mode === 'signage' && (!matKey
+        ? <p className="text-sm opacity-50 py-6 text-center">{T('Add a material first.', 'أضف مادة أولاً.')}</p>
+        : <div className="space-y-3">
+          <div><label className="label">{T('Material', 'الصنف')}</label>
+            <select className="input" value={matKey} onChange={(e) => setMat(e.target.value)}>
+              {areaKeys.map((k) => <option key={k} value={k}>{tx(rates.area[k])}</option>)}
+            </select></div>
+          <div className="grid grid-cols-2 gap-2">
+            {[['w', T('Width (m)', 'العرض (م)')], ['h', T('Height (m)', 'الارتفاع (م)')]].map(([k, l]) => (
+              <div key={k}><label className="label">{l}</label>
+                <input type="number" step="0.1" min="0" className="input tabular-nums" value={dim[k]} onChange={(e) => setDim({ ...dim, [k]: parseFloat(e.target.value) || 0 })} /></div>
+            ))}
+          </div>
+          <div className="rounded-lg bg-gold/15 px-3 py-2 text-xs">{T('Area', 'المساحة')}: {dim.w} × {dim.h} = <b className="text-gold">{sg.area.toFixed(2)} m²</b></div>
+          {Object.keys(rates.addons || {}).length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
+            {Object.entries(rates.addons).map(([k, a]) => (
+              <label key={k} className="flex items-center gap-1.5 text-xs cursor-pointer min-w-0">
+                <input type="checkbox" className="accent-[#C9A45C] shrink-0" checked={addonOn(a, sel, k)} onChange={(e) => setSel({ ...sel, [k]: e.target.checked })} />
+                <span className={`truncate ${addonOn(a, sel, k) ? '' : 'opacity-55'}`}>{tx(a)}</span>
+                <span className="opacity-35 shrink-0">{a.unit === 'flat' ? T('flat', 'مقطوع') : '/m²'}</span>
+              </label>
+            ))}
+          </div>}
+          <div className="border-t border-black/10 dark:border-white/10 pt-2">
+            {sg.lines.map((l) => <PriceRow key={l.k} label={tx(l)} value={money(l.v)} muted={l.k !== 'mat'} />)}
+          </div>
+        </div>)}
+
+      {mode === 'print' && (!itKey
+        ? <p className="text-sm opacity-50 py-6 text-center">{T('Add a printing item first.', 'أضف منتج طباعة أولاً.')}</p>
+        : <div className="space-y-3">
+          <div><label className="label">{T('Item', 'المنتج')}</label>
+            <select className="input" value={itKey} onChange={(e) => setPr({ ...pr, item: e.target.value, size: '' })}>
+              {printKeys.map((k) => <option key={k} value={k}>{tx(rates.print[k])}</option>)}
+            </select></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className="label">{T('Size', 'المقاس')}</label>
+              <select className="input" value={pq.size} onChange={(e) => setPr({ ...pr, size: e.target.value })}>{pq.sizes.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
+            <div><label className="label">{T('Paper', 'الورق')}</label>
+              <select className="input" value={pr.paper} onChange={(e) => setPr({ ...pr, paper: +e.target.value })}>{Object.keys(rates.mult?.paper || {}).map((g) => <option key={g} value={g}>{g} g</option>)}</select></div>
+            <div><label className="label">{T('Finish', 'التشطيب')}</label>
+              <select className="input" value={pr.lam} onChange={(e) => setPr({ ...pr, lam: e.target.value })}>{Object.keys(rates.mult?.lam || {}).map((k) => <option key={k} value={k}>{lamName(k)}</option>)}</select></div>
+            <div><label className="label">{T('Sides', 'الجهات')}</label>
+              <select className="input" value={pr.sides} onChange={(e) => setPr({ ...pr, sides: +e.target.value })}>{Object.keys(rates.mult?.sides || {}).map((s) => <option key={s} value={s}>{Number(s) === 2 ? T('Double side', 'وجهين') : T('Single side', 'وجه واحد')}</option>)}</select></div>
+          </div>
+          <div><label className="label">{T('Quantity', 'الكمية')}</label>
+            <div className="flex gap-1.5 flex-wrap">{Object.keys(rates.mult?.qty || {}).map(Number).map((q) => (
+              <button key={q} type="button" onClick={() => setPr({ ...pr, qty: q })}
+                className={`badge border transition tabular-nums ${pr.qty === q ? 'bg-gold text-ink border-gold' : 'border-black/10 dark:border-white/15'}`}>
+                {q.toLocaleString('en-US')}{rates.mult.qty[q] < 1 && <span className="opacity-60"> −{Math.round((1 - rates.mult.qty[q]) * 100)}%</span>}
+              </button>))}
+            </div></div>
+          <div className="flex flex-wrap gap-1.5">
+            {Object.entries(pq.mult).map(([k, v]) => (
+              <span key={k} className={`badge tabular-nums ${v === 1 ? 'bg-black/5 dark:bg-white/5 opacity-50' : 'bg-gold/15 text-gold'}`}>{MULT[k]} ×{v}</span>
+            ))}
+          </div>
+        </div>)}
+
+      <div className="border-t border-black/10 dark:border-white/10 mt-4 pt-3">
+        <PriceRow label={T('Subtotal before VAT', 'المجموع قبل الضريبة')} value={money(total)} />
+        <PriceRow label={`${T('VAT', 'ضريبة')} ${vat}%`} value={money((total * vat) / 100)} muted />
+        <div className="flex items-baseline gap-3 pt-2 mt-1 border-t border-black/5 dark:border-white/10">
+          <span className="flex-1 text-sm font-bold">{T('Customer pays', 'يدفع العميل')}</span>
+          <span className="text-xl font-extrabold text-gold tabular-nums">{money(total * (1 + vat / 100))}</span>
+        </div>
+        {mode === 'print' && <p className="text-[11px] opacity-45 mt-1 tabular-nums">{T('Unit price', 'سعر الوحدة')}: {money(pq.unit)} × {pq.pieces.toLocaleString('en-US')}</p>}
+      </div>
+    </section>
+  );
+}
+
+function Multipliers() {
+  const { T, lang, rates, upd } = useApp();
+  const set = (g, k, v) => upd((o) => ({ rates: { ...o.rates, mult: { ...o.rates.mult, [g]: { ...o.rates.mult[g], [k]: v } } } }));
+  const label = (g, k) => {
+    if (g === 'paper') return `${k} g`;
+    if (g === 'sides') return Number(k) === 2 ? T('Double side', 'وجهين') : T('Single side', 'وجه واحد');
+    if (g === 'lam') { const n = LAM_NAME[k]; return n ? (lang === 'ar' ? n[1] : n[0]) : k; }
+    if (g === 'qty') return Number(k).toLocaleString('en-US');
+    return k;
+  };
+  const groups = [
+    ['size', T('Size', 'المقاس')],
+    ['paper', T('Paper weight', 'وزن الورق')],
+    ['lam', T('Finish', 'التشطيب')],
+    ['sides', T('Sides', 'الجهات')],
+    ['qty', T('Quantity tier', 'شريحة الكمية')],
+  ];
+  return (
+    <Panel
+      title={<span className="text-gold">{T('Printing multipliers', 'معاملات المطبوعات')}</span>}
+      sub={T('The printing base price is quoted for A5 · 150 g · no finish · single side · 100 pcs. Each choice multiplies that base; the quantity row is a per-piece discount.', 'السعر الأساسي للمطبوعات محسوب على A5 · 150غ · بدون سلوفان · وجه واحد · 100 قطعة. كل خيار يضرب هذا الأساس، وشريحة الكمية هي خصم على سعر القطعة.')}
+    >
+      <div className="grid sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        {groups.map(([g, title]) => (
+          <div key={g}>
+            <div className="text-[10px] font-bold uppercase tracking-wide opacity-50 mb-2">{title}</div>
+            <div className="space-y-1.5">
+              {Object.entries(rates.mult?.[g] || {}).map(([k, v]) => (
+                <div key={k} className="flex items-center gap-1.5">
+                  <span className="flex-1 min-w-0 truncate text-xs opacity-75">{label(g, k)}</span>
+                  <input type="number" step="0.05" min="0" className="input !w-[72px] !py-1 text-end tabular-nums" value={v}
+                    onChange={(e) => set(g, k, parseFloat(e.target.value) || 0)} aria-label={title} />
+                  <span className={`text-[10px] w-10 text-end tabular-nums ${v < 1 ? 'text-emerald-500' : v > 1 ? 'text-gold' : 'opacity-35'}`}>
+                    {v === 1 ? '×1' : v < 1 ? `−${Math.round((1 - v) * 100)}%` : `+${Math.round((v - 1) * 100)}%`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 function Pricing() {
   const { T, rates, upd, resetAll, leads, quotes, orders, invoices, surveys, content, company } = useApp();
+  const [g, setG] = useState('area');
+  const [q, setQ] = useState('');
+  const cur = PRICE_GROUPS.find((x) => x[0] === g) || PRICE_GROUPS[0];
+  const count = (key) => Object.keys(rates[key] || {}).length;
   const exportData = () => {
     const data = JSON.stringify({ version: 2, rates, content, company, leads, quotes, orders, invoices, surveys }, null, 1);
     const a = document.createElement('a');
@@ -234,29 +406,64 @@ function Pricing() {
     });
   };
   return (
-    <div className="space-y-5">
-      <p className="text-sm opacity-70">{T('Add, edit or remove any calculator item — changes apply instantly to the public website.', 'أضف أو عدّل أو احذف أي عنصر في الحاسبة — التغييرات تظهر فوراً في الموقع.')}</p>
-      <div className="grid xl:grid-cols-2 gap-5">
-        <CatalogGroup g="area" title={T('Signage / Booth materials (price per m²)', 'مواد الآرمات والبوثات (سعر المتر المربع)')} unit="/ m²" />
-        <CatalogGroup g="addons" title={T('Signage add-ons', 'إضافات الآرمات')} unit="/ m²" />
-        <CatalogGroup g="print" title={T('Printing items (base unit price: A5 · 150g · single side)', 'المطبوعات (سعر القطعة الأساسي: A5 · 150غ · وجه)')} unit="/ pc" />
-        <CatalogGroup g="packages" title={T('Social media monthly packages', 'باقات السوشيال الشهرية')} unit="/ mo" />
-        <CatalogGroup g="marketing" title={T('Strategy & consultancy services', 'خدمات الاستراتيجية والاستشارات')} unit={T('flat', 'مقطوع')} />
-        <div className="glass p-5 xl:col-span-2"><h3 className="font-bold mb-3 text-gold">{T('Printing multipliers (× base price; quantity = per-unit discount factor)', 'معاملات المطبوعات (× السعر الأساسي؛ الكمية = معامل خصم)')}</h3>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {[['size', T('Size', 'المقاس')], ['paper', T('Paper (g)', 'الورق (غ)')], ['lam', T('Lamination', 'التشطيب')], ['sides', T('Sides', 'الجهات')], ['qty', T('Quantity tier', 'شريحة الكمية')]].map(([g, title]) => (
-              <div key={g}><div className="text-xs font-bold opacity-70 mb-2">{title}</div>
-                {Object.entries(rates.mult[g]).map(([k, v]) => <div key={k} className="flex items-center gap-2 mb-1.5 text-sm"><span className="flex-1">{k}</span>
-                  <input type="number" step="0.05" className="input !w-24" value={v} onChange={(e) => upd((o) => ({ rates: { ...o.rates, mult: { ...o.rates.mult, [g]: { ...o.rates.mult[g], [k]: parseFloat(e.target.value) || 0 } } } }))} /></div>)}</div>))}
-          </div></div>
-        <div className="glass p-5"><h3 className="font-bold mb-3 text-gold">{T('Tax', 'الضريبة')}</h3>
-          <div className="flex items-center gap-3 text-sm"><span className="flex-1">{T('VAT %', 'ضريبة القيمة المضافة %')}</span><input type="number" className="input !w-28" value={rates.vat} onChange={(e) => upd((o) => ({ rates: { ...o.rates, vat: parseFloat(e.target.value) || 0 } }))} /></div>
-          <button className="btn-ghost mt-5 text-xs" onClick={() => upd({ rates: DEFAULT_RATES })}><RotateCcw size={14} />{T('Reset rates to default', 'إعادة الأسعار الافتراضية')}</button>
-          <div className="flex gap-2 mt-2 flex-wrap">
-            <button className="btn-ghost text-xs" onClick={exportData}><Download size={14} />{T('Export backup', 'تصدير نسخة احتياطية')}</button>
-            <label className="btn-ghost text-xs cursor-pointer"><Upload size={14} />{T('Import backup', 'استيراد نسخة')}<input type="file" accept="application/json" className="hidden" onChange={importData} /></label></div>
-          <button className="btn-ghost mt-2 text-xs text-red-400" onClick={() => confirm(T('Reset website settings on this browser?', 'إعادة ضبط إعدادات الموقع على هذا المتصفح؟')) && resetAll()}><Trash2 size={14} />{T('Reset local settings', 'إعادة ضبط الإعدادات المحلية')}</button></div>
+    <div>
+      {/* sticky toolbar: switch catalog + search without losing your place in a long list */}
+      <div className="sticky top-[49px] md:top-[53px] z-10 -mx-4 md:-mx-8 px-4 md:px-8 py-3 mb-4 bg-cream-50/92 dark:bg-ink/92 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex gap-1 p-1 rounded-xl bg-black/5 dark:bg-white/5 overflow-x-auto max-w-full">
+            {PRICE_GROUPS.map(([k, en, ar]) => (
+              <button key={k} type="button" onClick={() => { setG(k); setQ(''); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${g === k ? 'bg-gold text-ink shadow-sm' : 'opacity-70 hover:opacity-100'}`}>
+                {T(en, ar)} <span className="opacity-60">({count(k)})</span>
+              </button>
+            ))}
+          </div>
+          <a href="/#calculator" target="_blank" rel="noreferrer" className="btn-ghost !py-2 !px-3 text-xs ms-auto">
+            <ExternalLink size={14} />{T('Open website calculator', 'فتح حاسبة الموقع')}
+          </a>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap mt-2">
+          <div className="relative flex-1 min-w-[160px] max-w-[280px]">
+            <Search size={14} className="absolute start-3 top-1/2 -translate-y-1/2 opacity-40" />
+            <input className="input !py-2 ps-9" placeholder={`${T('Search', 'بحث')} · ${T(cur[1], cur[2])}`} value={q} onChange={(e) => setQ(e.target.value)} />
+          </div>
+          <span className="text-[11px] opacity-45">{T('Edits save instantly to the website.', 'التعديلات تُحفظ فوراً في الموقع.')}</span>
+        </div>
       </div>
+
+      <div className="grid xl:grid-cols-5 gap-4 items-start">
+        <div className="xl:col-span-3">
+          <CatalogEditor g={g} unit={T(cur[3], cur[4])} q={q} onAdd={() => setQ('')} />
+          <p className="text-[11px] opacity-45 mt-2">{T('Click a row to rename it, change its department or reorder it. Prices save as you type.', 'اضغط أي صف لتغيير الاسم أو القسم أو الترتيب. الأسعار تُحفظ أثناء الكتابة.')}</p>
+        </div>
+        <div className="xl:col-span-2"><PricePreview /></div>
+      </div>
+
+      <div className="mt-4"><Multipliers /></div>
+
+      <section className="glass p-5 mt-4">
+        <h3 className="font-bold text-sm text-gold">{T('Tax, backup & reset', 'الضريبة والنسخ الاحتياطي')}</h3>
+        <p className="text-[11px] opacity-50 mt-1 mb-4">{T('VAT applies to every quote, order and invoice. Export a copy before you reset anything.', 'الضريبة تُطبّق على كل عرض وطلب وفاتورة. صدّر نسخة قبل أي إعادة ضبط.')}</p>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="flex-1">{T('VAT %', 'ضريبة القيمة المضافة %')}</span>
+              <input type="number" className="input !w-24 text-end tabular-nums" value={rates.vat} onChange={(e) => upd((o) => ({ rates: { ...o.rates, vat: parseFloat(e.target.value) || 0 } }))} />
+            </div>
+            <div className="flex gap-2 mt-4 flex-wrap">
+              <button className="btn-ghost text-xs" onClick={exportData}><Download size={14} />{T('Export backup', 'تصدير نسخة احتياطية')}</button>
+              <label className="btn-ghost text-xs cursor-pointer"><Upload size={14} />{T('Import backup', 'استيراد نسخة')}<input type="file" accept="application/json" className="hidden" onChange={importData} /></label>
+            </div>
+          </div>
+          <div className="rounded-xl border border-red-500/25 p-3">
+            <div className="text-[11px] font-semibold text-red-400 flex items-center gap-1.5 mb-2"><AlertTriangle size={13} />{T('Danger zone', 'منطقة الخطر')}</div>
+            <div className="flex gap-2 flex-wrap">
+              <button className="btn-ghost text-xs" onClick={() => confirm(T('Reset every price to the factory defaults?', 'إعادة كل الأسعار إلى القيم الافتراضية؟')) && upd({ rates: JSON.parse(JSON.stringify(DEFAULT_RATES)) })}><RotateCcw size={14} />{T('Reset prices', 'إعادة الأسعار')}</button>
+              <button className="btn-ghost text-xs text-red-400" onClick={() => confirm(T('Reset website settings on this browser?', 'إعادة ضبط إعدادات الموقع على هذا المتصفح؟')) && resetAll()}><Trash2 size={14} />{T('Reset local settings', 'إعادة ضبط الإعدادات المحلية')}</button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

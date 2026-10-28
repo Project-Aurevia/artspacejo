@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import Logo, { Mark } from './Logo.jsx';
 import { useApp, uid, CATS } from './store.jsx';
+import { signageQuote, printQuote, addonOn } from './pricing.js';
 import { uploadFile } from './api.js';
 
 /* ================= Header ================= */
@@ -303,28 +304,16 @@ function CalculatorSection() {
   /* --- signage / booths: everything comes from admin-editable rates --- */
   const matKey = rates.area[sg.mat] ? sg.mat : Object.keys(rates.area)[0];
   const mat = rates.area[matKey];
-  const isOn = (k) => (k in sel ? sel[k] : !!rates.addons[k].on);
-  const sgCalc = useMemo(() => {
-    const area = Math.max(0, sg.w * sg.h);
-    const lines = mat ? [{ k: 'mat', en: mat.en, ar: mat.ar, v: area * mat.price }] : [];
-    Object.entries(rates.addons).forEach(([k, a]) => {
-      if (k in sel ? sel[k] : !!a.on) lines.push({ k, en: a.en, ar: a.ar, v: a.unit === 'flat' ? a.price : area * a.price });
-    });
-    return { area, lines, total: lines.reduce((s, l) => s + l.v, 0) };
-  }, [sg, sel, rates, mat]);
+  const isOn = (k) => addonOn(rates.addons[k], sel, k);
+  // Same helper the admin price preview uses, so the two can never disagree.
+  const sgCalc = useMemo(() => signageQuote(rates, { mat: matKey, w: sg.w, h: sg.h, sel }), [sg, sel, rates, matKey]);
 
   /* --- printing --- */
   const itKey = rates.print[pr.item] ? pr.item : Object.keys(rates.print)[0];
   const it = rates.print[itKey];
   const sizes = it?.sizes?.length ? it.sizes : ['A4'];
   const size = sizes.includes(pr.size) ? pr.size : sizes[0];
-  const prCalc = useMemo(() => {
-    if (!it) return { unit: 0, total: 0 };
-    const m = rates.mult;
-    const unit = it.price * (m.size[size] ?? 1) * (m.paper[pr.paper] ?? 1) * (m.lam[pr.lam] ?? 1) * (m.sides[pr.sides] ?? 1);
-    const q = m.qty[pr.qty] ?? 1;
-    return { unit: unit * q, total: unit * pr.qty * q };
-  }, [pr, rates, it, size]);
+  const prCalc = useMemo(() => printQuote(rates, { item: itKey, size, paper: pr.paper, lam: pr.lam, sides: pr.sides, qty: pr.qty }), [pr, rates, itKey, size]);
 
   const push = (item) => upd({ cart: [...cart, { id: uid('i'), ...item }] });
   const addSg = () => push({

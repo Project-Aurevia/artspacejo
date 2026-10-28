@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, ArrowUp, ArrowDown, ImagePlus, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { useApp, uid, CATS } from './store.jsx';
 import { uploadMedia } from './api.js';
@@ -66,59 +66,133 @@ const NEW_ITEM = {
   marketing: { en: 'New service', ar: 'خدمة جديدة', price: 0, dept: 'marketing' },
 };
 
-export function CatalogGroup({ g, title, unit }) {
-  const { T, rates, upd } = useApp();
+/** Text field that keeps local state while typing and commits on blur — never rewrites the caret mid-word. */
+function BlurText({ v = '', onCommit, rows, ...rest }) {
+  const [txt, setTxt] = useState(v);
+  useEffect(() => { setTxt(v); }, [v]);
+  const Tag = rows ? 'textarea' : 'input';
+  return (
+    <Tag
+      className="input"
+      rows={rows}
+      value={txt}
+      onChange={(e) => setTxt(e.target.value)}
+      onBlur={() => { if (txt !== v) onCommit(txt); }}
+      {...rest}
+    />
+  );
+}
+
+/**
+ * Price list for one calculator catalog.
+ * Prices are edited straight in the row (the one number the owner changes weekly);
+ * everything else lives behind a chevron so the list stays scannable.
+ */
+export function CatalogEditor({ g, unit, q = '', onAdd }) {
+  const { T, lang, rates, upd } = useApp();
+  const [open, setOpen] = useState(() => new Set());
   const entries = Object.entries(rates[g] || {});
+  const needle = q.trim().toLowerCase();
+  const shown = entries.filter(([, m]) => !needle || `${m.en || ''} ${m.ar || ''}`.toLowerCase().includes(needle));
+  const name = (m) => (lang === 'ar' ? m.ar || m.en : m.en || m.ar) || '—';
+  const other = (m) => (lang === 'ar' ? m.en : m.ar) || '';
+  const deptName = (k) => { const c = CATS.find((x) => x[0] === k); return c ? (lang === 'ar' ? c[2] : c[1]) : k || '—'; };
+  const unitOf = (m) => (g === 'addons' ? (m.unit === 'flat' ? T('flat', 'مقطوع') : '/ m²') : unit);
   const patch = (k, p) => upd((o) => ({ rates: { ...o.rates, [g]: { ...o.rates[g], [k]: { ...o.rates[g][k], ...p } } } }));
   const remove = (k) => {
     if (!confirm(T('Delete this item? It disappears from the website calculator.', 'حذف هذا العنصر؟ سيختفي من الحاسبة في الموقع.'))) return;
     upd((o) => { const n = { ...o.rates[g] }; delete n[k]; return { rates: { ...o.rates, [g]: n } }; });
   };
-  const add = () => upd((o) => ({ rates: { ...o.rates, [g]: { ...o.rates[g], [uid('x')]: { ...NEW_ITEM[g] } } } }));
+  const add = () => {
+    const id = uid('x');
+    upd((o) => ({ rates: { ...o.rates, [g]: { ...o.rates[g], [id]: { ...NEW_ITEM[g] } } } }));
+    setOpen((o) => new Set(o).add(id));
+    if (onAdd) onAdd();
+  };
+  const mv = (k, d) => upd((o) => {
+    const list = Object.entries(o.rates[g] || {});
+    const i = list.findIndex(([key]) => key === k);
+    const j = i + d;
+    if (i < 0 || j < 0 || j >= list.length) return {};
+    [list[i], list[j]] = [list[j], list[i]];
+    return { rates: { ...o.rates, [g]: Object.fromEntries(list) } };
+  });
+  const toggle = (k) => setOpen((o) => { const n = new Set(o); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const lines = (txt) => txt.split('\n').map((s) => s.trim()).filter(Boolean);
+  const hasDept = g === 'area' || g === 'packages' || g === 'marketing';
 
   return (
-    <div className="glass p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-gold">{title}</h3>
-        <button type="button" className="btn-gold !py-1.5 text-xs" onClick={add}><Plus size={14} />{T('Add', 'إضافة')}</button>
+    <div className="glass overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-black/5 dark:border-white/10">
+        <span className="text-[11px] opacity-50">{shown.length}/{entries.length} {T('items', 'عنصر')}</span>
+        <button type="button" className="btn-gold !py-1.5 !px-3 text-xs ms-auto" onClick={add}><Plus size={14} />{T('Add item', 'إضافة عنصر')}</button>
       </div>
-      {entries.length === 0 && <p className="text-xs opacity-60">{T('Empty — add your first item.', 'فارغ — أضف أول عنصر.')}</p>}
-      <div className="space-y-3">
-        {entries.map(([k, m]) => (
-          <div key={k} className="rounded-xl border border-black/10 dark:border-white/10 p-3 space-y-2">
-            <div className="flex gap-2 items-start">
-              <div className="flex-1"><Pair label={T('Name', 'الاسم')} v={{ en: m.en, ar: m.ar }} on={(x) => patch(k, { en: x.en, ar: x.ar })} /></div>
-              <button type="button" className="text-red-400 mt-6" onClick={() => remove(k)}><Trash2 size={16} /></button>
-            </div>
-            <Pair label={T('Description (shown to customers)', 'الوصف (يظهر للعملاء)')} v={{ en: m.den, ar: m.dar }} on={(x) => patch(k, { den: x.en, dar: x.ar })} />
-            <div className="flex flex-wrap gap-4 items-end">
-              <div>
-                <label className="label">{T('Price (JOD)', 'السعر (دينار)')}</label>
-                <div className="flex items-center gap-2">
-                  <input type="number" step="0.01" className="input !w-28" value={m.price} onChange={(e) => patch(k, { price: parseFloat(e.target.value) || 0 })} />
-                  <span className="text-xs opacity-60">{g === 'addons' ? (m.unit === 'flat' ? T('flat', 'مقطوع') : '/ m²') : unit}</span>
+      {shown.length === 0 ? (
+        <p className="text-sm opacity-50 text-center py-8">{entries.length ? T('No item matches this search.', 'لا يوجد عنصر مطابق للبحث.') : T('Empty — add your first item.', 'فارغ — أضف أول عنصر.')}</p>
+      ) : (
+        <div className="divide-y divide-black/5 dark:divide-white/10">
+          {shown.map(([k, m]) => {
+            const i = entries.findIndex(([key]) => key === k);
+            const isOpen = open.has(k);
+            return (
+              <div key={k} className={isOpen ? 'bg-black/[0.02] dark:bg-white/[0.03]' : ''}>
+                <div className="flex items-center gap-2 px-2 sm:px-3 py-2">
+                  <button type="button" onClick={() => toggle(k)} className="btn-ghost !p-1.5 shrink-0" title={isOpen ? T('Collapse', 'طي') : T('Edit', 'تحرير')}>
+                    {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold truncate">{name(m)}</div>
+                    {other(m) && <div className="text-[11px] opacity-40 truncate" dir={lang === 'ar' ? 'ltr' : 'rtl'}>{other(m)}</div>}
+                  </div>
+                  <div className="hidden lg:flex items-center gap-1.5 shrink-0">
+                    {hasDept && <span className="badge bg-gold/15 text-gold">{deptName(m.dept)}</span>}
+                    {g === 'addons' && m.on && <span className="badge bg-emerald-500/15 text-emerald-500">{T('pre-selected', 'محدد')}</span>}
+                    {g === 'print' && <span className="text-[10px] opacity-40">{(m.sizes || []).length} {T('sizes', 'مقاس')}</span>}
+                    {g === 'packages' && m.popular && <span className="badge bg-terra/15 text-terra">{T('popular', 'الأكثر طلباً')}</span>}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input type="number" step="0.01" className="input !w-[92px] text-end" value={m.price}
+                      onChange={(e) => patch(k, { price: parseFloat(e.target.value) || 0 })} aria-label={T('Price', 'السعر')} />
+                    <span className="text-[10px] opacity-45 w-14 truncate">{unitOf(m)}</span>
+                  </div>
+                  <button type="button" className="text-red-400/70 hover:text-red-400 shrink-0 p-1" onClick={() => remove(k)} title={T('Delete', 'حذف')}><Trash2 size={15} /></button>
                 </div>
+
+                {isOpen && <div className="px-3 pb-3 space-y-3">
+                  <Pair label={T('Name', 'الاسم')} v={{ en: m.en, ar: m.ar }} on={(x) => patch(k, { en: x.en, ar: x.ar })} />
+                  <Pair area label={T('Description (shown to customers)', 'الوصف (يظهر للعملاء)')} v={{ en: m.den, ar: m.dar }} on={(x) => patch(k, { den: x.en, dar: x.ar })} />
+                  <div className="flex flex-wrap gap-3 items-end">
+                    {hasDept && <div><label className="label">{T('Department (for reports)', 'القسم (للتقارير)')}</label>
+                      <select className="input !w-40" value={m.dept || 'signage'} onChange={(e) => patch(k, { dept: e.target.value })}>
+                        {CATS.map(([key, en, ar]) => <option key={key} value={key}>{lang === 'ar' ? ar : en}</option>)}
+                      </select></div>}
+                    {g === 'addons' && <>
+                      <div><label className="label">{T('Charged', 'طريقة الاحتساب')}</label>
+                        <select className="input !w-40" value={m.unit || 'm2'} onChange={(e) => patch(k, { unit: e.target.value })}>
+                          <option value="m2">{T('per m²', 'للمتر المربع')}</option><option value="flat">{T('flat fee', 'مبلغ مقطوع')}</option></select></div>
+                      <label className="flex items-center gap-2 text-sm pb-2"><input type="checkbox" className="accent-[#C9A45C]" checked={!!m.on} onChange={(e) => patch(k, { on: e.target.checked })} />{T('Pre-selected', 'محدد افتراضياً')}</label>
+                    </>}
+                    {g === 'print' && <div className="flex-1 min-w-[200px]"><label className="label">{T('Available sizes (comma separated)', 'المقاسات المتاحة (مفصولة بفاصلة)')}</label>
+                      <BlurText v={(m.sizes || []).join(', ')} dir="ltr" onCommit={(t) => patch(k, { sizes: t.split(',').map((s) => s.trim()).filter(Boolean) })} /></div>}
+                    {g === 'packages' && <label className="flex items-center gap-2 text-sm pb-2"><input type="checkbox" className="accent-[#C9A45C]" checked={!!m.popular} onChange={(e) => patch(k, { popular: e.target.checked })} />{T('Mark as "Most Popular"', 'علامة "الأكثر طلباً"')}</label>}
+                    <div className="flex gap-1 ms-auto">
+                      <button type="button" disabled={i === 0} onClick={() => mv(k, -1)} className="btn-ghost !p-2 disabled:opacity-30" title={T('Move up', 'أعلى')}><ArrowUp size={14} /></button>
+                      <button type="button" disabled={i === entries.length - 1} onClick={() => mv(k, 1)} className="btn-ghost !p-2 disabled:opacity-30" title={T('Move down', 'أسفل')}><ArrowDown size={14} /></button>
+                      <button type="button" className="btn-gold !py-1.5 !px-3 text-[11px]" onClick={() => toggle(k)}>{T('Done', 'تم')}</button>
+                    </div>
+                  </div>
+                  {g === 'packages' && <div className="grid sm:grid-cols-2 gap-2">
+                    <div><label className="label">{T('Features EN (one per line)', 'المزايا EN (سطر لكل ميزة)')}</label>
+                      <BlurText v={(m.features?.en || []).join('\n')} dir="ltr" rows={4} onCommit={(t) => patch(k, { features: { ...m.features, en: lines(t) } })} /></div>
+                    <div><label className="label">{T('Features AR (one per line)', 'المزايا AR (سطر لكل ميزة)')}</label>
+                      <BlurText v={(m.features?.ar || []).join('\n')} dir="rtl" rows={4} onCommit={(t) => patch(k, { features: { ...m.features, ar: lines(t) } })} /></div>
+                  </div>}
+                </div>}
               </div>
-              {g === 'addons' && <>
-                <div><label className="label">{T('Charged', 'طريقة الاحتساب')}</label>
-                  <select className="input" value={m.unit || 'm2'} onChange={(e) => patch(k, { unit: e.target.value })}>
-                    <option value="m2">{T('per m²', 'للمتر المربع')}</option><option value="flat">{T('flat fee', 'مبلغ مقطوع')}</option></select></div>
-                <label className="flex items-center gap-2 text-sm pb-2"><input type="checkbox" className="accent-[#C9A45C]" checked={!!m.on} onChange={(e) => patch(k, { on: e.target.checked })} />{T('Pre-selected', 'محدد افتراضياً')}</label>
-              </>}
-              {g === 'print' && <div className="flex-1 min-w-[180px]"><label className="label">{T('Available sizes (comma separated)', 'المقاسات المتاحة (مفصولة بفاصلة)')}</label>
-                <input className="input" defaultValue={(m.sizes || []).join(', ')} onBlur={(e) => patch(k, { sizes: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} /></div>}
-              {g === 'packages' && <label className="flex items-center gap-2 text-sm pb-2"><input type="checkbox" className="accent-[#C9A45C]" checked={!!m.popular} onChange={(e) => patch(k, { popular: e.target.checked })} />{T('Mark as "Most Popular"', 'علامة "الأكثر طلباً"')}</label>}
-            </div>
-            {g === 'packages' && <div className="grid grid-cols-2 gap-2">
-              <div><label className="label">{T('Features EN (one per line)', 'المزايا EN (سطر لكل ميزة)')}</label>
-                <textarea rows="4" dir="ltr" className="input" defaultValue={(m.features?.en || []).join('\n')} onBlur={(e) => patch(k, { features: { ...m.features, en: lines(e.target.value) } })} /></div>
-              <div><label className="label">{T('Features AR (one per line)', 'المزايا AR (سطر لكل ميزة)')}</label>
-                <textarea rows="4" dir="rtl" className="input" defaultValue={(m.features?.ar || []).join('\n')} onBlur={(e) => patch(k, { features: { ...m.features, ar: lines(e.target.value) } })} /></div>
-            </div>}
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
