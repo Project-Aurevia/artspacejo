@@ -4,9 +4,11 @@ import { useApp, totals, uid, ORDER_STAGES, QUOTE_STATUS } from './store.jsx';
 import { Doc, renderPdf, StylePicker } from './Documents.jsx';
 import { sb, serverHealth } from './api.js';
 import { Modal, Stat, Badge, FileLink, Field, stageName } from './ui.jsx';
+import { addDays, dueOf, invoiceView, todayStr } from './adminStats.js';
 
-const DEPTS = [['signage', 'Signage', 'آرمات'], ['printing', 'Printing', 'مطبوعات'], ['social', 'Social', 'سوشيال'], ['marketing', 'Marketing', 'تسويق']];
-const today = () => new Date().toISOString().slice(0, 10);
+const DEPTS = [['signage', 'Signage', 'آرمات'], ['booths', 'Booths', 'بوثات'], ['printing', 'Printing', 'مطبوعات'], ['social', 'Social', 'سوشيال'], ['marketing', 'Strategy', 'استشارات']];
+// Local calendar date (UTC serialisation would date a document "yesterday" before 03:00 in Amman).
+const today = todayStr;
 const r2 = (n) => Math.round(n * 100) / 100;
 
 function FitDoc(props) {
@@ -322,7 +324,7 @@ export function Invoices() {
   };
   const create = (e) => {
     e.preventDefault();
-    const ni = { id: uid('inv'), no: nextNo(invoices, 'INV'), clientId: creating, date: today(), vat: true, vatRate: rates.vat, discount: 0, items: [], payments: [] };
+    const ni = { id: uid('inv'), no: nextNo(invoices, 'INV'), clientId: creating, date: today(), due: addDays(today(), 30), vat: true, vatRate: rates.vat, discount: 0, items: [], payments: [] };
     upd((o) => ({ invoices: [ni, ...o.invoices] })); setCreating(''); setId(ni.id); setMode('edit');
   };
   const remove = () => { if (confirm(T('Delete this invoice?', 'حذف الفاتورة؟'))) { upd((o) => ({ invoices: o.invoices.filter((i) => i.id !== id) })); setId(null); } };
@@ -332,9 +334,9 @@ export function Invoices() {
     <div>
       <div className="flex mb-4"><button className="btn-terra ms-auto" onClick={() => setCreating(leads[0]?.id || 'x')}><Plus size={15} />{T('New invoice', 'فاتورة جديدة')}</button></div>
       <div className="glass overflow-auto">
-        <table className="w-full text-sm"><thead className="text-xs opacity-60"><tr>{['#', T('Client', 'العميل'), T('Total', 'الإجمالي'), T('Paid', 'المدفوع'), T('Remaining', 'المتبقي')].map((h) => <th key={h} className="p-3 text-start">{h}</th>)}</tr></thead>
-          <tbody>{invoices.map((i) => { const tt = totals(i, rates.vat); return <tr key={i.id} onClick={() => { setId(i.id); setMode('edit'); }} className="border-t border-black/5 dark:border-white/10 cursor-pointer hover:bg-gold/5"><td className="p-3 font-semibold">{i.no}</td><td className="p-3">{leads.find((l) => l.id === i.clientId)?.name}</td><td className="p-3">{money(tt.total)}</td><td className="p-3 text-emerald-500">{money(paidOf(i))}</td><td className="p-3 text-terra font-bold">{money(tt.total - paidOf(i))}</td></tr>; })}
-            {!invoices.length && <tr><td colSpan="5" className="p-6 text-center opacity-60">{T('Create an invoice or convert an approved quotation.', 'أنشئ فاتورة أو حوّل عرضاً معتمداً.')}</td></tr>}</tbody></table>
+        <table className="w-full text-sm"><thead className="text-xs opacity-60"><tr>{['#', T('Client', 'العميل'), T('Total', 'الإجمالي'), T('Paid', 'المدفوع'), T('Remaining', 'المتبقي'), T('Due', 'الاستحقاق')].map((h) => <th key={h} className="p-3 text-start">{h}</th>)}</tr></thead>
+          <tbody>{invoices.map((i) => { const v = invoiceView(i, rates.vat); return <tr key={i.id} onClick={() => { setId(i.id); setMode('edit'); }} className="border-t border-black/5 dark:border-white/10 cursor-pointer hover:bg-gold/5"><td className="p-3 font-semibold">{i.no}</td><td className="p-3">{leads.find((l) => l.id === i.clientId)?.name}</td><td className="p-3">{money(v.total)}</td><td className="p-3 text-emerald-500">{money(v.paid)}</td><td className="p-3 text-terra font-bold">{money(v.balance)}</td><td className="p-3 text-xs whitespace-nowrap">{v.overdue ? <span className="badge bg-red-500/15 text-red-400">{v.late} {T('days late', 'يوم تأخير')}</span> : <span className="opacity-60" dir="ltr">{v.due}</span>}</td></tr>; })}
+            {!invoices.length && <tr><td colSpan="6" className="p-6 text-center opacity-60">{T('Create an invoice or convert an approved quotation.', 'أنشئ فاتورة أو حوّل عرضاً معتمداً.')}</td></tr>}</tbody></table>
       </div>
       {creating && <Modal title={T('New invoice', 'فاتورة جديدة')} onClose={() => setCreating('')}>
         <form onSubmit={create} className="space-y-3"><label className="label">{T('Client', 'العميل')}</label>
@@ -352,9 +354,10 @@ export function Invoices() {
           <FitDoc kind="invoice" dl={dl} doc={{ ...inv, vatRate: inv.vatRate ?? rates.vat }} client={client} company={company} />
         </> : <div className="space-y-5">
           <ItemsEditor items={inv.items} onChange={(items) => patch({ items })} />
-          <div className="grid sm:grid-cols-3 gap-3 items-end">
-            <Field label={T('Discount (JOD)', 'الخصم (دينار)')} type="number" v={inv.discount} on={(discount) => patch({ discount })} />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
             <Field label={T('Date', 'التاريخ')} type="date" v={inv.date} on={(date) => patch({ date })} />
+            <Field label={T('Due date', 'تاريخ الاستحقاق')} type="date" v={inv.due || dueOf(inv)} on={(due) => patch({ due })} />
+            <Field label={T('Discount (JOD)', 'الخصم (دينار)')} type="number" v={inv.discount} on={(discount) => patch({ discount })} />
             <label className="flex items-center gap-2 text-sm pb-2"><input type="checkbox" className="accent-[#C9A45C]" checked={inv.vat} onChange={(e) => patch({ vat: e.target.checked })} />{T('Apply VAT', 'تطبيق الضريبة')} {inv.vatRate ?? rates.vat}%</label>
           </div>
           <div><h4 className="font-bold text-sm mb-2">{T('Payments', 'الدفعات')}</h4>

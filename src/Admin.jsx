@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  LayoutDashboard, Tag, Users, FileText, Hammer, Receipt, Sun, Moon, Languages, Globe, Plus, RotateCcw, Trash2, Kanban, Table2, LogOut, Download, Upload, Images, Building2, Ruler,
+  LayoutDashboard, Tag, Users, FileText, Hammer, Receipt, Sun, Moon, Languages, Globe, Plus, RotateCcw, Trash2, Kanban, Table2, LogOut, Download, Upload, Images, Building2, Ruler, AlertTriangle, Percent, Wallet,
 } from 'lucide-react';
 import Logo from './Logo.jsx';
 import { CatalogGroup, ContentManager } from './AdminContent.jsx';
@@ -10,39 +10,201 @@ import { Quotes, Orders, Invoices } from './AdminDocs.jsx';
 import { Modal, Stat, Badge, FileLink, Field, stageName } from './ui.jsx';
 import { sb, serverHealth } from './api.js';
 import { useApp, totals, LEAD_STAGES, LEAD_CATS, ORDER_STAGES, QUOTE_STATUS, DEFAULT_RATES } from './store.jsx';
+import { buildStats } from './adminStats.js';
 
-const DEPT = { signage: '#C9A45C', printing: '#CB6B47', social: '#F0E4D6', marketing: '#7DA7A1' };
+const DEPT_COLOR = { signage: '#C9A45C', booths: '#5B8FB9', printing: '#CB6B47', social: '#8E7CC3', marketing: '#7DA7A1', general: '#9CA3AF' };
+const TONE = { gold: 'text-gold', emerald: 'text-emerald-500', red: 'text-red-400', sky: 'text-sky-400', terra: 'text-terra', violet: 'text-violet-400' };
+const FUNNEL_BAR = ['bg-sky-400', 'bg-sky-400', 'bg-violet-400', 'bg-gold', 'bg-amber-400', 'bg-emerald-500', 'bg-red-400'];
+
+/* ================= Dashboard building blocks ================= */
+function Panel({ title, sub, action, className = '', children }) {
+  return (
+    <section className={`glass p-5 ${className}`}>
+      <div className="flex items-start gap-3 mb-4">
+        <div className="min-w-0">
+          <h3 className="font-bold text-sm leading-tight">{title}</h3>
+          {sub && <p className="text-[11px] opacity-50 mt-1">{sub}</p>}
+        </div>
+        {action && <div className="ms-auto shrink-0">{action}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function MiniBar({ pct, className = 'bg-gold' }) {
+  const w = Math.max(0, Math.min(100, Number(pct) || 0));
+  return <div className="h-1.5 w-full rounded-full bg-black/10 dark:bg-white/10 overflow-hidden"><div className={`h-full rounded-full ${className}`} style={{ width: `${w}%` }} /></div>;
+}
+
+function Kpi({ icon: Icon, label, value, hint, tone = 'gold', bar }) {
+  return (
+    <div className="glass p-5">
+      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide opacity-60"><Icon size={14} className={TONE[tone]} />{label}</div>
+      <div className={`text-[26px] leading-tight font-extrabold mt-2 ${TONE[tone]}`}>{value}</div>
+      {bar != null && <div className="mt-3"><MiniBar pct={bar} className={tone === 'emerald' ? 'bg-emerald-500' : tone === 'red' ? 'bg-red-500' : 'bg-gold'} /></div>}
+      {hint && <div className="text-[11px] opacity-50 mt-2 leading-snug">{hint}</div>}
+    </div>
+  );
+}
+
+function Tile({ label, value, hint, tone = 'gold' }) {
+  return (
+    <div className="glass px-4 py-3 flex items-center gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] uppercase tracking-wide font-semibold opacity-50">{label}</div>
+        <div className={`text-lg font-extrabold mt-0.5 ${TONE[tone]}`}>{value}</div>
+      </div>
+      <div className="text-[10px] opacity-45 text-end leading-tight max-w-[45%]">{hint}</div>
+    </div>
+  );
+}
+
+const Empty = ({ children }) => <p className="text-sm opacity-50 py-6 text-center">{children}</p>;
 
 /* ================= Dashboard ================= */
-function Dashboard() {
-  const { T, money, rates, quotes, orders, leads, invoices, lang } = useApp();
-  const revenue = invoices.reduce((s, i) => s + i.payments.reduce((a, p) => a + Number(p.amount), 0), 0);
-  const pending = quotes.filter((q) => ['draft', 'sent'].includes(q.status)).length;
-  const active = orders.filter((o) => !['draft', 'done'].includes(o.stage)).length;
-  const newLeads = leads.filter((l) => l.stage === 'new').length;
-  const conv = leads.length ? Math.round((leads.filter((l) => l.stage === 'won').length / leads.length) * 100) : 0;
-  const byDept = {};
-  invoices.forEach((i) => { const t = totals(i, rates.vat); const f = t.sub ? t.total / t.sub : 1; i.items.forEach((it) => { byDept[it.dept] = (byDept[it.dept] || 0) + it.price * f; }); });
-  const max = Math.max(1, ...Object.values(byDept));
-  const names = { signage: T('Signage & Booths', 'آرمات ومعارض'), printing: T('Printing', 'مطبوعات'), social: T('Social Media', 'سوشيال'), marketing: T('Marketing', 'تسويق') };
+function Dashboard({ onNav }) {
+  const { T, money, lang, rates, quotes, orders, leads, invoices } = useApp();
+  // One pass over the data; the memo keeps typing elsewhere snappy on big data sets.
+  const s = useMemo(() => buildStats({ leads, quotes, orders, invoices, rates }), [leads, quotes, orders, invoices, rates]);
+  const pc = (n) => `${Math.round((Number(n) || 0) * 10) / 10}%`;
+  const monthName = (key) => {
+    const [y, m] = String(key).split('-').map(Number);
+    return new Date(y, (m || 1) - 1, 1).toLocaleDateString(lang === 'ar' ? 'ar-JO' : 'en-GB', { month: 'short' });
+  };
+  const maxMonth = Math.max(1, ...s.byMonth.map((m) => Math.max(m.invoiced, m.collected)));
+  const maxFunnel = Math.max(1, ...s.funnel.map((f) => f.count));
+  const deptName = (k) => ({
+    signage: T('Signage', 'آرمات'), booths: T('Booths', 'بوثات'), printing: T('Printing', 'مطبوعات'),
+    social: T('Social Media', 'سوشيال'), marketing: T('Strategy', 'استشارات'),
+  }[k] || T('Other / mixed', 'أخرى / متنوع'));
+  const openInvoices = () => onNav && onNav('invoices');
+
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <Stat l={T('Total Revenue (collected)', 'إجمالي الإيرادات (المحصلة)')} v={money(revenue)} />
-        <Stat l={T('Pending Quotations', 'عروض أسعار معلقة')} v={pending} c="text-terra" />
-        <Stat l={T('Active Production Orders', 'طلبات قيد التنفيذ')} v={active} />
-        <Stat l={T('New Leads', 'عملاء جدد')} v={newLeads} c="text-sky-400" />
-        <Stat l={T('Conversion Rate', 'نسبة التحويل')} v={`${conv}%`} c="text-emerald-500" />
-        <Stat l={T('Unpaid Balances', 'أرصدة غير مدفوعة')} v={money(invoices.reduce((s, i) => s + totals(i, rates.vat).total - i.payments.reduce((a, p) => a + Number(p.amount), 0), 0))} c="text-red-400" />
+    <div className="space-y-4">
+      {/* headline commercial KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Kpi icon={Receipt} label={T('Total sales', 'إجمالي المبيعات')} value={money(s.sales)}
+          hint={`${s.invoiceCount} ${T('invoices', 'فاتورة')} · ${T('avg', 'متوسط')} ${money(s.avgInvoice)}`} />
+        <Kpi icon={Wallet} label={T('Collected', 'المحصّل')} value={money(s.collected)} tone="emerald" bar={s.collectionRate}
+          hint={`${T('Collection rate', 'نسبة التحصيل')} ${pc(s.collectionRate)}`} />
+        <Kpi icon={AlertTriangle} label={T('Delayed payments', 'الدفعات المتأخرة')} value={money(s.overdue)} tone="red"
+          hint={s.overdueCount ? `${s.overdueCount} ${T('invoices past due', 'فاتورة متأخرة')}` : T('Nothing overdue', 'لا يوجد تأخير')} />
+        <Kpi icon={Percent} label={T('Conversion rate', 'نسبة التحويل')} value={pc(s.conversion)} tone="sky"
+          hint={`${s.won}/${leads.length} ${T('leads won', 'عميل تم ربحه')} · ${T('win rate', 'نسبة الفوز')} ${pc(s.winRate)}`} />
       </div>
-      <div className="glass p-6">
-        <h3 className="font-bold mb-5">{T('Revenue by Department (invoiced)', 'الإيرادات حسب القسم (مفوترة)')}</h3>
-        {Object.keys(byDept).length === 0 ? <p className="opacity-60 text-sm">{T('No invoices yet.', 'لا توجد فواتير.')}</p> :
-          <div className="flex items-end gap-6 h-52">{Object.entries(byDept).map(([k, v]) => <div key={k} className="flex-1 flex flex-col items-center justify-end h-full">
-            <span className="text-xs font-bold mb-1">{money(v)}</span><div className="w-full max-w-[70px] rounded-t-lg transition-all duration-700" style={{ height: `${(v / max) * 80}%`, background: DEPT[k] }} /><span className="text-xs mt-2 opacity-70 text-center">{names[k]}</span></div>)}</div>}
+
+      {/* secondary money-at-a-glance strip */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Tile label={T('Outstanding, not due', 'مستحق غير متأخر')} value={money(s.notYetDue)} hint={T('invoiced, awaiting payment', 'مفوتر بانتظار السداد')} />
+        <Tile label={T('Open pipeline', 'قيمة العروض المفتوحة')} value={money(s.pipeline)} tone="sky" hint={`${s.openQuotes} ${T('quotations', 'عرض سعر')}`} />
+        <Tile label={T('Approved, not invoiced', 'معتمد غير مفوتر')} value={money(s.approved)} tone="violet" hint={`${s.approvedQuotes} ${T('ready to bill', 'جاهز للفوترة')}`} />
+        <Tile label={T('In production', 'قيد التنفيذ')} value={money(s.activeOrderValue)} tone="terra" hint={`${s.activeOrders} ${T('active orders', 'طلب نشط')}`} />
       </div>
-      <div className="glass p-6"><h3 className="font-bold mb-3">{T('Latest Leads', 'أحدث العملاء')}</h3>
-        {leads.slice(0, 5).map((l) => <div key={l.id} className="flex justify-between text-sm py-2 border-b border-black/5 dark:border-white/10"><span>{l.name} <span className="opacity-50">· {l.company}</span></span><Badge id={l.stage}>{stageName(LEAD_STAGES, l.stage, lang)}</Badge></div>)}</div>
+
+      {/* trend + department split */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Panel className="xl:col-span-2" title={T('Cash flow — last 6 months', 'التدفق النقدي — آخر 6 أشهر')}
+          sub={T('Gold = invoiced · Green = collected', 'ذهبي = مفوتر · أخضر = محصّل')}
+          action={<span className="text-[11px] opacity-50">{T('Outstanding', 'المتبقي')} {money(s.outstanding)}</span>}>
+          <div className="flex items-end gap-2 sm:gap-3 h-44">
+            {s.byMonth.map((m) => (
+              <div key={m.key} className="flex-1 h-full flex flex-col justify-end items-center gap-2">
+                <div className="flex items-end justify-center gap-1 w-full h-full">
+                  <div className="w-1/3 max-w-[26px] rounded-t-md bg-gold/80" title={`${T('Invoiced', 'مفوتر')}: ${money(m.invoiced)}`} style={{ height: `${(m.invoiced / maxMonth) * 100}%`, minHeight: m.invoiced > 0 ? 4 : 0 }} />
+                  <div className="w-1/3 max-w-[26px] rounded-t-md bg-emerald-500/80" title={`${T('Collected', 'محصّل')}: ${money(m.collected)}`} style={{ height: `${(m.collected / maxMonth) * 100}%`, minHeight: m.collected > 0 ? 4 : 0 }} />
+                </div>
+                <span className="text-[10px] opacity-60 whitespace-nowrap">{monthName(m.key)}</span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+        <Panel title={T('Revenue by department', 'الإيرادات حسب القسم')} sub={T('Share of invoiced value', 'حصة القيمة المفوترة')}>
+          {s.byDept.length === 0 ? <Empty>{T('No invoices yet.', 'لا توجد فواتير.')}</Empty> : (
+            <div className="space-y-3">
+              {s.byDept.map((d) => (
+                <div key={d.key}>
+                  <div className="flex justify-between gap-2 text-[11px] mb-1"><span className="opacity-70 truncate">{deptName(d.key)}</span><span className="font-semibold whitespace-nowrap">{pc(d.share)}<span className="opacity-40"> · {money(d.value)}</span></span></div>
+                  <div className="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.min(100, d.share)}%`, background: DEPT_COLOR[d.key] || '#9CA3AF' }} /></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      {/* funnel + aging + clients */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Panel title={T('Sales funnel', 'مسار البيع')} sub={T('Leads by stage', 'العملاء حسب المرحلة')}>
+          {leads.length === 0 ? <Empty>{T('No leads yet.', 'لا يوجد عملاء بعد.')}</Empty> : (
+            <div className="space-y-2.5">
+              {s.funnel.map((f, i) => (
+                <div key={f.key}>
+                  <div className="flex justify-between text-[11px] mb-1"><span className="opacity-70">{stageName(LEAD_STAGES, f.key, lang)}</span><span className="font-semibold">{f.count}<span className="opacity-40"> · {Math.round((f.count / Math.max(1, leads.length)) * 100)}%</span></span></div>
+                  <MiniBar pct={(f.count / maxFunnel) * 100} className={FUNNEL_BAR[i] || 'bg-gold'} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+        <Panel title={T('Outstanding by age', 'الأرصدة حسب العمر')} sub={T('How late the money is', 'مدى تأخر التحصيل')}>
+          {s.outstanding <= 0 ? <Empty>{T('Everything is collected.', 'كل المبالغ محصّلة.')}</Empty> : (
+            <div className="space-y-3">
+              {s.aging.map((a, i) => (
+                <div key={a.key}>
+                  <div className="flex justify-between gap-2 text-[11px] mb-1"><span className={i === 0 ? 'opacity-70' : 'text-red-400'}>{lang === 'ar' ? a.ar : a.en}</span><span className="font-semibold whitespace-nowrap">{money(a.amount)}<span className="opacity-40"> ({a.count})</span></span></div>
+                  <MiniBar pct={s.outstanding ? (a.amount / s.outstanding) * 100 : 0} className={i === 0 ? 'bg-gold' : i < 3 ? 'bg-amber-500' : 'bg-red-500'} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+        <Panel title={T('Top clients', 'أفضل العملاء')} sub={T('By cash collected', 'حسب المبالغ المحصّلة')}
+          action={<button type="button" className="text-[11px] text-gold" onClick={() => onNav && onNav('crm')}>{T('CRM', 'العملاء')}</button>}>
+          {s.topClients.length === 0 ? <Empty>{T('No invoices yet.', 'لا توجد فواتير.')}</Empty> : (
+            <div>{s.topClients.map((c) => (
+              <div key={c.id} className="flex items-center gap-3 py-2 border-b border-black/5 dark:border-white/10 last:border-0 text-sm">
+                <span className="flex-1 truncate">{c.name}</span>
+                <span className="text-emerald-500 font-semibold whitespace-nowrap">{money(c.collected)}</span>
+                {c.balance > 0 && <span className="text-[10px] text-terra whitespace-nowrap">{money(c.balance)} {T('due', 'مستحق')}</span>}
+              </div>
+            ))}</div>
+          )}
+        </Panel>
+      </div>
+
+      {/* delayed payments + newest leads */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Panel className="xl:col-span-2" title={T('Delayed payments', 'الدفعات المتأخرة')}
+          sub={s.overdueCount ? `${s.overdueCount} ${T('invoices · most overdue first', 'فاتورة · الأكثر تأخراً أولاً')}` : T('Nothing overdue', 'لا يوجد تأخير')}
+          action={<button type="button" className="btn-ghost !py-1.5 !px-3 text-[11px]" onClick={openInvoices}><Receipt size={13} />{T('Invoices', 'الفواتير')}</button>}>
+          {s.overdueList.length === 0 ? <Empty>{T('No invoice is past its due date.', 'لا توجد فاتورة تجاوزت تاريخ استحقاقها.')}</Empty> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-[11px] opacity-50"><tr>{[T('Invoice', 'الفاتورة'), T('Client', 'العميل'), T('Due', 'الاستحقاق'), T('Late', 'التأخير'), T('Balance', 'المتبقي')].map((h) => <th key={h} className="text-start px-2 py-2 font-semibold">{h}</th>)}</tr></thead>
+                <tbody>{s.overdueList.map((o) => (
+                  <tr key={o.id} className="border-t border-black/5 dark:border-white/10">
+                    <td className="px-2 py-2 font-semibold whitespace-nowrap">{o.no}</td>
+                    <td className="px-2 py-2 truncate max-w-[170px]">{o.client}</td>
+                    <td className="px-2 py-2 text-xs opacity-60" dir="ltr">{o.due}</td>
+                    <td className="px-2 py-2"><span className="badge bg-red-500/15 text-red-400 whitespace-nowrap">{o.late} {T('days', 'يوم')}</span></td>
+                    <td className="px-2 py-2 font-bold text-terra whitespace-nowrap">{money(o.balance)}</td>
+                  </tr>))}</tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+        <Panel title={T('Latest leads', 'أحدث العملاء')} sub={`${s.newLeads} ${T('waiting for first contact', 'بانتظار أول تواصل')}`}>
+          {leads.length === 0 ? <Empty>{T('No leads yet.', 'لا يوجد عملاء بعد.')}</Empty> : (
+            <div>{leads.slice(0, 5).map((l) => (
+              <div key={l.id} className="flex items-center justify-between gap-2 text-sm py-2 border-b border-black/5 dark:border-white/10 last:border-0">
+                <span className="truncate">{l.name} <span className="opacity-50">· {l.company}</span></span>
+                <Badge id={l.stage}>{stageName(LEAD_STAGES, l.stage, lang)}</Badge>
+              </div>
+            ))}</div>
+          )}
+        </Panel>
+      </div>
     </div>
   );
 }
@@ -206,26 +368,48 @@ export default function Admin() {
   const [tab, setTab] = useState('dash');
   if (!auth) return <Login />;
   const badges = { crm: leads.filter((l) => l.stage === 'new').length, quotes: quotes.filter((q) => q.status === 'draft' && !q.converted).length, surveys: surveys.filter((s) => s.status === 'new').length };
-  const tabs = [['dash', LayoutDashboard, T('Dashboard', 'لوحة المؤشرات')], ['crm', Users, 'CRM'], ['surveys', Ruler, T('Site Surveys', 'معاينات المواقع')], ['quotes', FileText, T('Quotations', 'عروض الأسعار')], ['orders', Hammer, T('Production', 'الطلبات والتنفيذ')], ['invoices', Receipt, T('Invoices', 'الفواتير')], ['pricing', Tag, T('Calculator & Pricing', 'الحاسبة والأسعار')], ['content', Images, T('Website Content', 'محتوى الموقع')], ['company', Building2, T('Company & Quote Style', 'الشركة وشكل العروض')]];
+  // Grouped so nine destinations read as three questions: what happened, what's sold, what's published.
+  const groups = [
+    [T('Overview', 'نظرة عامة'), [['dash', LayoutDashboard, T('Dashboard', 'لوحة المؤشرات')]]],
+    [T('Sales', 'المبيعات'), [['crm', Users, 'CRM'], ['quotes', FileText, T('Quotations', 'عروض الأسعار')], ['invoices', Receipt, T('Invoices', 'الفواتير')]]],
+    [T('Delivery', 'التنفيذ'), [['surveys', Ruler, T('Site Surveys', 'معاينات المواقع')], ['orders', Hammer, T('Production', 'الطلبات والتنفيذ')]]],
+    [T('Website', 'الموقع'), [['pricing', Tag, T('Calculator & Pricing', 'الحاسبة والأسعار')], ['content', Images, T('Website Content', 'محتوى الموقع')], ['company', Building2, T('Company & Quote Style', 'الشركة وشكل العروض')]]],
+  ];
+  const tabs = groups.flatMap(([, list]) => list);
+  const current = tabs.find((t) => t[0] === tab) || tabs[0];
   const View = { dash: Dashboard, pricing: Pricing, content: ContentManager, crm: CRM, surveys: Surveys, quotes: Quotes, orders: Orders, invoices: Invoices, company: CompanySettings }[tab];
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
-      <aside className="md:w-60 bg-ink text-cream p-4 md:min-h-screen shrink-0 no-print">
-        <Logo className="h-8" />
-        <nav className="mt-6 flex md:flex-col gap-1 overflow-x-auto">
-          {tabs.map(([id, Icon, l]) => <button key={id} onClick={() => setTab(id)} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm whitespace-nowrap transition ${tab === id ? 'bg-gold text-ink font-bold' : 'hover:bg-white/10'}`}><Icon size={17} />{l}
-            {badges[id] > 0 && <span className="ms-auto bg-terra text-white text-[10px] rounded-full min-w-[18px] h-[18px] px-1 grid place-items-center">{badges[id]}</span>}</button>)}
+    <div className="min-h-screen md:flex">
+      <aside className="md:w-64 shrink-0 bg-ink text-cream no-print md:sticky md:top-0 md:h-screen md:overflow-y-auto">
+        <div className="p-4 flex items-center gap-3">
+          <Logo className="h-8" />
+          <span className="ms-auto text-[10px] uppercase tracking-widest opacity-40">{T('Admin', 'الإدارة')}</span>
+        </div>
+        <nav className="px-3 pb-3 flex md:block gap-1 overflow-x-auto md:space-y-4 md:overflow-visible">
+          {groups.map(([label, list]) => (
+            <div key={label} className="contents md:block">
+              <div className="hidden md:block text-[10px] uppercase tracking-wider opacity-40 px-3 mb-1.5">{label}</div>
+              <div className="flex md:block gap-1 md:space-y-1">
+                {list.map(([id, Icon, l]) => <button key={id} type="button" onClick={() => setTab(id)} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm whitespace-nowrap transition md:w-full ${tab === id ? 'bg-gold text-ink font-bold' : 'hover:bg-white/10'}`}><Icon size={17} />{l}
+                  {badges[id] > 0 && <span className="ms-auto bg-terra text-white text-[10px] rounded-full min-w-[18px] h-[18px] px-1 grid place-items-center">{badges[id]}</span>}</button>)}
+              </div>
+            </div>
+          ))}
         </nav>
-        <div className="mt-6 flex md:flex-col gap-2">
-          <button className="btn-ghost !border-white/20 !text-sm" onClick={() => upd({ lang: lang === 'ar' ? 'en' : 'ar' })}><Languages size={15} />{lang === 'ar' ? 'English' : 'العربية'}</button>
-          <button className="btn-ghost !border-white/20 !text-sm" onClick={() => upd({ dark: !dark })}>{dark ? <Sun size={15} /> : <Moon size={15} />}</button>
-          <button className="btn-terra !text-sm" onClick={() => location.assign('/')}><Globe size={15} />{T('View Website', 'عرض الموقع')}</button>
-          <button className="btn-ghost !border-white/20 !text-sm" onClick={() => { sb.auth.signOut(); location.assign('/'); }}><LogOut size={15} />{T('Logout', 'خروج')}</button>
+        <div className="px-3 pb-5 flex md:flex-col gap-2 md:mt-2">
+          <button type="button" className="btn-ghost !border-white/20 !text-sm" onClick={() => upd({ lang: lang === 'ar' ? 'en' : 'ar' })}><Languages size={15} />{lang === 'ar' ? 'English' : 'العربية'}</button>
+          <button type="button" className="btn-ghost !border-white/20 !text-sm" onClick={() => upd({ dark: !dark })}>{dark ? <Sun size={15} /> : <Moon size={15} />}</button>
+          <button type="button" className="btn-terra !text-sm" onClick={() => location.assign('/')}><Globe size={15} />{T('View Website', 'عرض الموقع')}</button>
+          <button type="button" className="btn-ghost !border-white/20 !text-sm" onClick={() => { sb.auth.signOut(); location.assign('/'); }}><LogOut size={15} />{T('Logout', 'خروج')}</button>
         </div>
       </aside>
-      <main className="flex-1 p-5 md:p-8 min-w-0">
-        <h1 className="text-2xl font-extrabold mb-5 no-print">{tabs.find((t) => t[0] === tab)[2]}</h1>
-        <View />
+      <main className="flex-1 min-w-0">
+        <header className="sticky top-0 z-20 no-print border-b border-black/5 dark:border-white/10 bg-cream-50/85 dark:bg-ink/85 backdrop-blur px-4 md:px-8 py-3">
+          <h1 className="text-lg md:text-xl font-extrabold leading-tight">{current[2]}</h1>
+        </header>
+        <div className="px-4 md:px-8 py-5 w-full max-w-[1500px]">
+          <View onNav={setTab} />
+        </div>
       </main>
     </div>
   );
