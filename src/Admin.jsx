@@ -1,18 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  LayoutDashboard, Tag, Users, FileText, Hammer, Receipt, Sun, Moon, Languages, Globe, Plus, RotateCcw, Trash2, Kanban, Table2, LogOut, Download, Upload, Images, Building2, Ruler, AlertTriangle, Percent, Wallet,
+  LayoutDashboard, Tag, Users, FileText, Hammer, Receipt, Sun, Moon, Languages, Globe, Plus, RotateCcw, Trash2, Kanban, Table2, LogOut, Download, Upload, Images, Building2, Ruler, AlertTriangle, Percent, Wallet, Briefcase, Banknote, Mail, UserCog,
   Search, ExternalLink, PanelLeftClose, ChevronsRight, ChevronRight, Menu, X, Eye, EyeOff, ArrowRight, Check,
+  FolderKanban, Warehouse, TrendingUp, Package, ShoppingCart, ShieldAlert, Sparkles
 } from 'lucide-react';
 import Logo, { Mark } from './Logo.jsx';
 import { CatalogEditor, ContentManager } from './AdminContent.jsx';
 import { signageQuote, printQuote, addonOn } from './pricing.js';
 import CompanySettings from './AdminCompany.jsx';
+import EmailSettings from './AdminEmail.jsx';
+import UsersAdmin from './AdminUsers.jsx';
 import Surveys from './AdminSurveys.jsx';
 import { Quotes, Orders, Invoices } from './AdminDocs.jsx';
 import Accounting from './AdminAccounting.jsx';
+import HR from './AdminHR.jsx';
+import Payroll from './AdminPayroll.jsx';
+import AdminProjects, { computeProjectFinancials } from './AdminProjects.jsx';
+import AdminInventory from './AdminInventory.jsx';
+import { accountingSummary } from './accounting.js';
 import { Modal, Stat, Badge, FileLink, Field, stageName, Dialog, Kbd, Skeleton } from './ui.jsx';
-import { sb, serverHealth } from './api.js';
-import { useApp, totals, LEAD_STAGES, LEAD_CATS, ORDER_STAGES, QUOTE_STATUS, DEFAULT_RATES } from './store.jsx';
+import { sb, serverHealth, usersApi } from './api.js';
+import { advanceConsumption, monthOf } from './payroll.js';
+import { useApp, totals, LEAD_STAGES, LEAD_CATS, ORDER_STAGES, QUOTE_STATUS, DEFAULT_RATES, PROJECT_STATUSES } from './store.jsx';
 import { buildStats } from './adminStats.js';
 
 const DEPT_COLOR = { signage: '#C9A45C', booths: '#5B8FB9', printing: '#CB6B47', social: '#8E7CC3', marketing: '#7DA7A1', general: '#9CA3AF' };
@@ -24,7 +33,7 @@ const TONE_HEX = { gold: '#C9A45C', emerald: '#10b981', red: '#f87171', sky: '#3
 
 function Panel({ title, sub, action, className = '', children }) {
   return (
-    <section className={`glass p-5 ${className}`}>
+    <section className={`glass p-4 ${className} sm:p-5`}>
       <div className="panel-head mb-4 flex items-start gap-3 pb-3">
         <div className="min-w-0">
           <h3 className="text-[13px] font-bold leading-tight tracking-tight">{title}</h3>
@@ -84,9 +93,44 @@ const Empty = ({ children }) => <p className="py-6 text-center text-sm text-subt
 
 /* ================= Dashboard ================= */
 function Dashboard({ onNav }) {
-  const { T, money, lang, rates, quotes, orders, leads, invoices } = useApp();
-  // One pass over the data; the memo keeps typing elsewhere snappy on big data sets.
+  const {
+    T, money, lang, rates, me, canDo, quotes = [], orders = [], leads = [], invoices = [],
+    purchases = [], cash = [], payrolls = [], projects = [], inventory = [], stock_movements = [],
+    surveys = [], advances = [], employees = [],
+  } = useApp();
+  const v = (m) => canDo(m, 'view');
+  const fin = v('invoices') || v('accounting');
+  const sales = v('crm') || v('quotes');
+
+  // Delete requests waiting for a full-access administrator (only they can see/decide them).
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+  useEffect(() => {
+    if (!me?.full) return undefined;
+    let alive = true;
+    const load = () => usersApi.approvals().then(({ data }) => { if (alive && data) setPendingApprovals(data.filter((a) => a.status === 'pending').length); });
+    load();
+    const id = setInterval(load, 60000);
+    return () => { alive = false; clearInterval(id); };
+  }, [me?.full]);
+
   const s = useMemo(() => buildStats({ leads, quotes, orders, invoices, rates }), [leads, quotes, orders, invoices, rates]);
+  const acct = useMemo(() => accountingSummary({ invoices, quotes, purchases, cash, payrolls, rates }), [invoices, quotes, purchases, cash, payrolls, rates]);
+
+  const inventoryValuation = useMemo(() => {
+    return (inventory || []).reduce((acc, i) => acc + (Number(i.currentQty || 0) * Number(i.unitCost || 0)), 0);
+  }, [inventory]);
+
+  const lowStockItems = useMemo(() => {
+    return (inventory || []).filter((i) => Number(i.currentQty || 0) <= Number(i.minStock || 0));
+  }, [inventory]);
+
+  const projectsFin = useMemo(() => {
+    return (projects || []).map((p) => ({
+      ...p,
+      fin: computeProjectFinancials(p, { invoices, purchases, stock_movements, cash }),
+    }));
+  }, [projects, invoices, purchases, stock_movements, cash]);
+
   const pc = (n) => `${Math.round((Number(n) || 0) * 10) / 10}%`;
   const monthName = (key) => {
     const [y, m] = String(key).split('-').map(Number);
@@ -100,10 +144,146 @@ function Dashboard({ onNav }) {
   }[k] || T('Other / mixed', 'أخرى / متنوع'));
   const openInvoices = () => onNav && onNav('invoices');
 
+  // "Needs attention" — one place that surfaces work waiting in every module the user may see.
+  const consumed = useMemo(() => advanceConsumption(payrolls), [payrolls]);
+  const openAdvances = advances.reduce((sum, a) => sum + Math.max(0, Number(a.amount || 0) - Number(consumed[a.id] || 0)), 0);
+  const thisMonth = monthOf();
+  const payrollDue = employees.some((e) => e.active !== false) && !payrolls.some((r) => r.month === thisMonth && r.status !== 'draft');
+  const newSurveys = surveys.filter((x) => x.status === 'new').length;
+  const attention = [
+    me?.full && pendingApprovals > 0 && ['users', ShieldAlert, `${pendingApprovals} ${T('delete request(s) awaiting approval', 'طلب حذف بانتظار الموافقة')}`, 'text-terra'],
+    sales && s.newLeads > 0 && ['crm', Users, `${s.newLeads} ${T('new lead(s) waiting for first contact', 'عميل جديد بانتظار التواصل')}`, 'text-sky-400'],
+    v('surveys') && newSurveys > 0 && ['surveys', Ruler, `${newSurveys} ${T('new site survey / visit request(s)', 'طلب معاينة / زيارة جديد')}`, 'text-violet-400'],
+    fin && s.overdueCount > 0 && ['invoices', AlertTriangle, `${s.overdueCount} ${T('overdue invoice(s)', 'فاتورة متأخرة')} · ${money(s.overdue)}`, 'text-red-400'],
+    v('inventory') && lowStockItems.length > 0 && ['inventory', Package, `${lowStockItems.length} ${T('item(s) low on stock', 'مادة منخفضة المخزون')}`, 'text-amber-500'],
+    (v('hr') || v('payroll')) && openAdvances > 0 && ['hr', Banknote, `${T('Open staff advances', 'سلف موظفين مفتوحة')} · ${money(openAdvances)}`, 'text-gold'],
+    v('payroll') && payrollDue && ['payroll', Banknote, `${T('Payroll for', 'كشف رواتب')} ${thisMonth} ${T('is not approved yet', 'لم يُعتمد بعد')}`, 'text-gold'],
+  ].filter(Boolean);
+
   return (
-    <div className="space-y-5">
-      {/* headline commercial KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-line/10 bg-surface p-4 shadow-soft sm:p-5">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-fg">
+          <ShieldAlert size={16} className="text-terra" />{T('Needs attention', 'يحتاج إلى متابعة')}
+        </h2>
+        {attention.length === 0 ? (
+          <p className="flex items-center gap-2 text-xs text-emerald-500"><Check size={14} />{T('All clear — nothing is waiting.', 'كل شيء على ما يرام — لا يوجد ما ينتظر.')}</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {attention.map(([tab, Icon, label, tone]) => (
+              <button key={tab + label} type="button" onClick={() => onNav && onNav(tab)} className="flex items-center gap-2 rounded-xl border border-line/10 bg-canvas px-3 py-2 text-xs font-semibold transition hover:border-gold/40">
+                <Icon size={14} className={tone} />{label}<ArrowRight size={12} className="text-subtle rtl:rotate-180" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Executive Decision Header Strip */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-surface border border-line/10 shadow-soft">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-line/10">
+          <div>
+            <h2 className="text-base font-bold text-fg flex items-center gap-2">
+              <Sparkles size={18} className="text-terra" />
+              {T('Executive Control Center', 'مركز التحكم والقرارات الاستراتيجية')}
+            </h2>
+            <p className="text-xs text-muted mt-0.5">
+              {T('Integrated real-time overview: True Operating P&L, Active Projects, Warehouse Stock, and Cash Runway.',
+                 'مؤشرات الأداء المتكاملة: صافي الربح الحقيقي، أرباح المشاريع، مخزون المستودع، والسيولة النقدية.')}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {v('projects') && (
+            <button type="button" onClick={() => onNav && onNav('projects')} className="btn-ghost !py-1 !px-2.5 text-xs flex items-center gap-1.5 border border-line/15 rounded-xl hover:bg-terra/10 hover:text-terra">
+              <FolderKanban size={13} className="text-terra" />
+              {T('Projects', 'المشاريع')}
+            </button>
+            )}
+            {v('inventory') && (
+            <button type="button" onClick={() => onNav && onNav('inventory')} className="btn-ghost !py-1 !px-2.5 text-xs flex items-center gap-1.5 border border-line/15 rounded-xl hover:bg-gold/10 hover:text-gold">
+              <Warehouse size={13} className="text-gold" />
+              {T('Inventory', 'المستودع')}
+            </button>
+            )}
+            {v('accounting') && (
+            <button type="button" onClick={() => onNav && onNav('accounting')} className="btn-ghost !py-1 !px-2.5 text-xs flex items-center gap-1.5 border border-line/15 rounded-xl hover:bg-emerald-500/10 hover:text-emerald-500">
+              <Wallet size={13} className="text-emerald-500" />
+              {T('P&L', 'الأرباح')}
+            </button>
+            )}
+          </div>
+        </div>
+
+        {/* 4 Connected Cross-Department Strategic Pillars */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {v('accounting') && (
+          <div className="p-3.5 rounded-2xl bg-canvas border border-line/5">
+            <div className="text-[11px] text-muted flex items-center justify-between">
+              <span>{T('True Operating Income', 'صافي الربح التشغيلي (EBIT)')}</span>
+              <span className={`w-2 h-2 rounded-full ${acct.netProfit >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`} />
+            </div>
+            <div className={`text-xl font-bold mt-1 ${acct.netProfit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+              {money(acct.netProfit)}
+            </div>
+            <div className="text-[10px] text-subtle mt-0.5">
+              {T('Net of VAT · Direct Costs · Payroll · Cash', 'صافي بعد المواد والرواتب والنثريات')}
+            </div>
+          </div>
+          )}
+          {v('projects') && (
+          <div className="p-3.5 rounded-2xl bg-canvas border border-line/5">
+            <div className="text-[11px] text-muted flex items-center justify-between">
+              <span>{T('Active Projects Pipeline', 'قيمة المشاريع الجارية')}</span>
+              <FolderKanban size={14} className="text-terra" />
+            </div>
+            <div className="text-xl font-bold mt-1 text-fg">
+              {projectsFin.filter((p) => p.status !== 'completed').length} {T('Jobs', 'مشاريع')}
+            </div>
+            <div className="text-[10px] text-subtle mt-0.5">
+              {money(projectsFin.filter((p) => p.status !== 'completed').reduce((sum, p) => sum + p.fin.revenue, 0))} {T('contracted', 'قيمة العقود')}
+            </div>
+          </div>
+          )}
+          {v('inventory') && (
+          <div className="p-3.5 rounded-2xl bg-canvas border border-line/5">
+            <div className="text-[11px] text-muted flex items-center justify-between">
+              <span>{T('Warehouse Stock Valuation', 'أصول المواد بالمستودع')}</span>
+              <Package size={14} className="text-gold" />
+            </div>
+            <div className="text-xl font-bold mt-1 text-gold">
+              {money(inventoryValuation)}
+            </div>
+            <div className="text-[10px] text-subtle mt-0.5 flex items-center gap-1">
+              {lowStockItems.length > 0 ? (
+                <span className="text-amber-500 font-semibold flex items-center gap-1">
+                  <AlertTriangle size={11} /> {lowStockItems.length} {T('items low on stock', 'مواد منخفضة')}
+                </span>
+              ) : (
+                <span className="text-emerald-500">{T('All stock healthy', 'المخزون كافٍ ومستقر')}</span>
+              )}
+            </div>
+          </div>
+          )}
+          {v('accounting') && (
+          <div className="p-3.5 rounded-2xl bg-canvas border border-line/5">
+            <div className="text-[11px] text-muted flex items-center justify-between">
+              <span>{T('Liquid Working Capital', 'السيولة والتحصيل')}</span>
+              <Wallet size={14} className="text-emerald-500" />
+            </div>
+            <div className="text-xl font-bold mt-1 text-fg">
+              {money(acct.cashOnHand)}
+            </div>
+            <div className="text-[10px] text-subtle mt-0.5">
+              {money(s.collected)} {T('collected this period', 'تم تحصيله')}
+            </div>
+          </div>
+          )}
+        </div>
+      </div>
+
+      {/* Primary Commercial KPIs */}
+      {fin && (
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Kpi icon={Receipt} label={T('Total sales', 'إجمالي المبيعات')} value={money(s.sales)}
           hint={`${s.invoiceCount} ${T('invoices', 'فاتورة')} · ${T('avg', 'متوسط')} ${money(s.avgInvoice)}`} />
         <Kpi icon={Wallet} label={T('Collected', 'المحصّل')} value={money(s.collected)} tone="emerald" bar={s.collectionRate}
@@ -113,16 +293,114 @@ function Dashboard({ onNav }) {
         <Kpi icon={Percent} label={T('Conversion rate', 'نسبة التحويل')} value={pc(s.conversion)} tone="sky"
           hint={`${s.won}/${leads.length} ${T('leads won', 'عميل تم ربحه')} · ${T('win rate', 'نسبة الفوز')} ${pc(s.winRate)}`} />
       </div>
+      )}
 
-      {/* secondary money-at-a-glance strip */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Tile label={T('Outstanding, not due', 'مستحق غير متأخر')} value={money(s.notYetDue)} hint={T('invoiced, awaiting payment', 'مفوتر بانتظار السداد')} />
-        <Tile label={T('Open pipeline', 'قيمة العروض المفتوحة')} value={money(s.pipeline)} tone="sky" hint={`${s.openQuotes} ${T('quotations', 'عرض سعر')}`} />
-        <Tile label={T('Approved, not invoiced', 'معتمد غير مفوتر')} value={money(s.approved)} tone="violet" hint={`${s.approvedQuotes} ${T('ready to bill', 'جاهز للفوترة')}`} />
-        <Tile label={T('In production', 'قيد التنفيذ')} value={money(s.activeOrderValue)} tone="terra" hint={`${s.activeOrders} ${T('active orders', 'طلب نشط')}`} />
+      {/* Active Projects Profitability Card + Low Stock Alerts */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        {v('projects') && (
+        <Panel
+          className="xl:col-span-2"
+          title={T('Active Projects & Real-Time Job Margins', 'المشاريع الجارية وهوامش الربح الحقيقية')}
+          sub={T('Live tracking of Revenue vs Direct Material & Site Costs', 'تتبع الإيرادات مقابل تكاليف المواد ونفقات المواقع')}
+          action={
+            <button
+              type="button"
+              className="text-xs text-terra font-semibold hover:underline flex items-center gap-1"
+              onClick={() => onNav && onNav('projects')}
+            >
+              {T('View all projects', 'عرض كل المشاريع')} <ArrowRight size={13} className="rtl:rotate-180" />
+            </button>
+          }
+        >
+          {projectsFin.length === 0 ? (
+            <Empty>{T('No active projects. Approve a quote or create a project to start.', 'لا توجد مشاريع جارية. اعتمد عرض سعر للبدء.')}</Empty>
+          ) : (
+            <div className="space-y-3">
+              {projectsFin.slice(0, 4).map((p) => (
+                <div key={p.id} className="p-3 bg-canvas/60 rounded-2xl border border-line/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] font-bold text-terra bg-terra/10 px-1.5 py-0.5 rounded">
+                        {p.no}
+                      </span>
+                      <span className="font-bold text-xs text-fg truncate">{p.title}</span>
+                    </div>
+                    <div className="text-[11px] text-muted mt-1 flex items-center gap-3">
+                      <span>{T('Revenue', 'الإيراد')}: <b className="text-fg">{money(p.fin.revenue)}</b></span>
+                      <span>{T('Costs', 'التكلفة')}: <b className="text-terra">{money(p.fin.totalCost)}</b></span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 self-end sm:self-auto">
+                    <div className="text-end">
+                      <div className={`font-bold text-xs ${p.fin.grossProfit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {money(p.fin.grossProfit)}
+                      </div>
+                      <div className="text-[10px] text-subtle">{T('Profit', 'الربح')}</div>
+                    </div>
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded-xl font-bold font-mono ${
+                        p.fin.marginPct >= 38
+                          ? 'bg-emerald-500/15 text-emerald-500'
+                          : p.fin.marginPct >= 20
+                          ? 'bg-gold/15 text-gold'
+                          : 'bg-red-500/15 text-red-500'
+                      }`}
+                    >
+                      {p.fin.marginPct.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+        )}
+        {v('inventory') && (
+        <Panel
+          title={T('Critical Inventory Alerts', 'تنبيهات نقص المواد بالمستودع')}
+          sub={T('Raw materials below safety stock limits', 'المواد التي قاربت على النفاد وتحتاج طلب توريد')}
+          action={
+            <button
+              type="button"
+              className="text-xs text-gold font-semibold hover:underline flex items-center gap-1"
+              onClick={() => onNav && onNav('inventory')}
+            >
+              {T('Warehouse', 'المستودع')} <ArrowRight size={13} className="rtl:rotate-180" />
+            </button>
+          }
+        >
+          {lowStockItems.length === 0 ? (
+            <div className="text-center py-6">
+              <Check className="mx-auto text-emerald-500 mb-1" size={24} />
+              <p className="text-xs text-muted">{T('All warehouse stocks are within safe limits.', 'جميع المواد بالمستودع ضمن الحدود الآمنة.')}</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {lowStockItems.slice(0, 5).map((itm) => (
+                <div key={itm.id} className="p-2.5 bg-canvas/60 rounded-xl border border-line/5 flex items-center justify-between text-xs">
+                  <div>
+                    <div className="font-bold text-fg">{lang === 'ar' ? itm.name?.ar : itm.name?.en}</div>
+                    <div className="text-[10px] text-muted font-mono">{itm.sku} · {itm.location}</div>
+                  </div>
+                  <div className="text-end">
+                    <span className="text-xs font-bold text-red-500">
+                      {itm.currentQty} {itm.unit}
+                    </span>
+                    <span className="text-[10px] text-subtle block">
+                      {T('Min', 'الحد')}: {itm.minStock}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+        )}
       </div>
 
       {/* trend + department split */}
+      {fin && (
       <div className="grid gap-4 xl:grid-cols-3">
         <Panel className="xl:col-span-2" title={T('Cash flow — last 6 months', 'التدفق النقدي — آخر 6 أشهر')}
           sub={T('Gold = invoiced · Green = collected', 'ذهبي = مفوتر · أخضر = محصّل')}
@@ -152,9 +430,11 @@ function Dashboard({ onNav }) {
           )}
         </Panel>
       </div>
+      )}
 
       {/* funnel + aging + clients */}
       <div className="grid gap-4 xl:grid-cols-3">
+        {sales && (
         <Panel title={T('Sales funnel', 'مسار البيع')} sub={T('Leads by stage', 'العملاء حسب المرحلة')}>
           {leads.length === 0 ? <Empty>{T('No leads yet.', 'لا يوجد عملاء بعد.')}</Empty> : (
             <div className="space-y-2.5">
@@ -167,6 +447,8 @@ function Dashboard({ onNav }) {
             </div>
           )}
         </Panel>
+        )}
+        {fin && (
         <Panel title={T('Outstanding by age', 'الأرصدة حسب العمر')} sub={T('How late the money is', 'مدى تأخر التحصيل')}>
           {s.outstanding <= 0 ? <Empty>{T('Everything is collected.', 'كل المبالغ محصّلة.')}</Empty> : (
             <div className="space-y-3">
@@ -179,6 +461,8 @@ function Dashboard({ onNav }) {
             </div>
           )}
         </Panel>
+        )}
+        {fin && (
         <Panel title={T('Top clients', 'أفضل العملاء')} sub={T('By cash collected', 'حسب المبالغ المحصّلة')}
           action={<button type="button" className="text-[11px] text-gold" onClick={() => onNav && onNav('crm')}>{T('CRM', 'العملاء')}</button>}>
           {s.topClients.length === 0 ? <Empty>{T('No invoices yet.', 'لا توجد فواتير.')}</Empty> : (
@@ -191,10 +475,12 @@ function Dashboard({ onNav }) {
             ))}</div>
           )}
         </Panel>
+        )}
       </div>
 
       {/* delayed payments + newest leads */}
       <div className="grid gap-4 xl:grid-cols-3">
+        {fin && (
         <Panel className="xl:col-span-2" title={T('Delayed payments', 'الدفعات المتأخرة')}
           sub={s.overdueCount ? `${s.overdueCount} ${T('invoices · most overdue first', 'فاتورة · الأكثر تأخراً أولاً')}` : T('Nothing overdue', 'لا يوجد تأخير')}
           action={<button type="button" className="btn-ghost !py-1.5 !px-3 text-[11px]" onClick={openInvoices}><Receipt size={13} />{T('Invoices', 'الفواتير')}</button>}>
@@ -214,6 +500,8 @@ function Dashboard({ onNav }) {
             </div>
           )}
         </Panel>
+        )}
+        {sales && (
         <Panel title={T('Latest leads', 'أحدث العملاء')} sub={`${s.newLeads} ${T('waiting for first contact', 'بانتظار أول تواصل')}`}>
           {leads.length === 0 ? <Empty>{T('No leads yet.', 'لا يوجد عملاء بعد.')}</Empty> : (
             <div>{leads.slice(0, 5).map((l) => (
@@ -224,6 +512,7 @@ function Dashboard({ onNav }) {
             ))}</div>
           )}
         </Panel>
+        )}
       </div>
     </div>
   );
@@ -306,7 +595,7 @@ function PricePreview({ onManage }) {
                 const on = addonOn(a, sel, k);
                 return (
                   <label key={k} className="flex items-start gap-1.5 text-xs cursor-pointer min-w-0">
-                    <input type="checkbox" className="accent-[#C9A45C] shrink-0 mt-0.5" checked={on} onChange={(e) => setSel({ ...sel, [k]: e.target.checked })} />
+                    <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-gold" checked={on} onChange={(e) => setSel({ ...sel, [k]: e.target.checked })} />
                     <span className="min-w-0">
                       <span className={`block truncate ${on ? '' : 'opacity-55'}`}>{tx(a)}</span>
                       <span className="block text-[10px] opacity-35 truncate">{a.unit === 'flat' ? T('flat fee', 'مبلغ مقطوع') : T('per m²', 'للمتر المربع')} · {money(a.price)}</span>
@@ -353,7 +642,7 @@ function PricePreview({ onManage }) {
             </div></div>
           <div className="flex flex-wrap gap-1.5">
             {Object.entries(pq.mult).map(([k, v]) => (
-              <span key={k} className={`badge tabular-nums ${v === 1 ? 'bg-black/5 dark:bg-white/5 opacity-50' : 'bg-gold/15 text-gold'}`}>{MULT[k]} ×{v}</span>
+              <span key={k} className={`badge tabular-nums ${v === 1 ? 'bg-surface-3 text-subtle opacity-70' : 'bg-gold/15 text-gold'}`}>{MULT[k]} ×{v}</span>
             ))}
           </div>
         </div>)}
@@ -555,7 +844,7 @@ function CRM() {
           <div><label className="label">{T('Category', 'الفئة')}</label><select className="input" value={client.category || 'general'} onChange={(e) => patchLead(client.id, { category: e.target.value })}>{LEAD_CATS.map(([k, en, ar]) => <option key={k} value={k}>{lang === 'ar' ? ar : en}</option>)}</select></div>
           <div className="col-span-2"><label className="label">{T('Notes', 'ملاحظات')}</label><textarea className="input" rows="2" value={client.notes || ''} onChange={(e) => patchLead(client.id, { notes: e.target.value })} /></div>
           {client.file && <FileLink name={client.file} path={client.filePath} />}
-          <div className="text-xs opacity-50 col-span-2 flex items-center">{client.source} · {client.date}<button className="ms-auto text-red-400 flex items-center gap-1" onClick={() => { if (confirm(T('Delete this client and all their quotes, orders and invoices?', 'حذف العميل وكل عروضه وطلباته وفواتيره؟'))) { const cid = client.id; setSel(null); upd((o) => ({ leads: o.leads.filter((l) => l.id !== cid), quotes: o.quotes.filter((x) => x.clientId !== cid), orders: o.orders.filter((x) => x.clientId !== cid), invoices: o.invoices.filter((x) => x.clientId !== cid) })); } }}><Trash2 size={13} />{T('Delete client', 'حذف العميل')}</button></div>
+          <div className="text-xs opacity-50 col-span-2 flex items-center">{client.source} · {client.date}<button className="ms-auto text-red-400 flex items-center gap-1" onClick={() => { if (confirm(T('Delete this client and all their quotes, orders and invoices?', 'حذف العميل وكل عروضه وطلباته وفواتيره؟'))) { const cid = client.id; setSel(null); upd((o) => ({ leads: o.leads.filter((l) => l.id !== cid), quotes: o.quotes.filter((x) => x.clientId !== cid), orders: o.orders.filter((x) => x.clientId !== cid), invoices: o.invoices.filter((x) => x.clientId !== cid), surveys: (o.surveys || []).filter((x) => x.clientId !== cid) })); } }}><Trash2 size={13} />{T('Delete client', 'حذف العميل')}</button></div>
         </div>
         <div className="grid grid-cols-3 gap-3 mb-4"><Stat l={T('Quotations', 'عروض')} v={quotes.filter((q) => q.clientId === client.id).length} /><Stat l={T('Orders', 'طلبات')} v={orders.filter((o) => o.clientId === client.id).length} /><Stat l={T('Unpaid', 'غير مدفوع')} v={money(balance(client.id))} c="text-red-400" /></div>
         <h4 className="font-bold text-sm mb-2">{T('History', 'السجل')}</h4>
@@ -715,7 +1004,7 @@ function Login() {
         <div className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gold" aria-hidden="true" />
         {/* Brand panel */}
         <div className="hidden flex-col justify-between border-e border-white/10 bg-white/[0.015] p-9 lg:flex">
-          <Logo className="h-11" />
+          <Mark variant="color" className="h-12 w-12" />
           <div className="space-y-4">
             <p className="eyebrow text-gold">{T('ArtSpace · Amman', 'آرت سبيس · عمّان')}</p>
             <h2 className="text-[26px] font-extrabold leading-snug tracking-tight">
@@ -739,20 +1028,22 @@ function Login() {
 
         {/* Form panel */}
         <form onSubmit={submit} className="p-7 sm:p-9">
-          <div className="mb-8 lg:hidden"><Logo className="h-9" /></div>
+          <div className="mb-8 lg:hidden"><Mark variant="color" className="h-10 w-10" /></div>
           <p className="eyebrow text-gold">{T('Admin access', 'دخول الإدارة')}</p>
           <h1 className="mt-2.5 text-xl font-extrabold tracking-tight">{T('Sign in', 'تسجيل الدخول')}</h1>
           <p className="mt-1.5 text-xs text-cream/45">{T('Authorised staff only.', 'للموظفين المصرّح لهم فقط.')}</p>
 
           <div className="mt-6 space-y-4">
-            <div>
-              <label htmlFor="as-email" className="label !text-cream/55">{T('Email', 'البريد الإلكتروني')}</label>
-              <input
-                id="as-email" type="email" required={needsEmail === true} autoFocus={needsEmail === true}
-                autoComplete="username" className="input" placeholder="name@artspace.jo"
-                value={email} onChange={(e) => { setEmail(e.target.value); setErr(''); }}
-              />
-            </div>
+            {needsEmail !== false && (
+              <div>
+                <label htmlFor="as-email" className="label !text-cream/55">{T('Email', 'البريد الإلكتروني')}</label>
+                <input
+                  id="as-email" type="email" required={needsEmail === true} autoFocus={needsEmail === true}
+                  autoComplete="username" inputMode="email" className="input" placeholder="name@artspacejo.com"
+                  value={email} onChange={(e) => { setEmail(e.target.value); setErr(''); }}
+                />
+              </div>
+            )}
             <div>
               <label htmlFor="as-pw" className="label !text-cream/55">{T('Password', 'كلمة المرور')}</label>
               <div className="relative">
@@ -796,8 +1087,8 @@ function Login() {
 
 /* ================= Shell ================= */
 export default function Admin() {
-  const { T, lang, dark, upd, auth, leads, quotes, surveys } = useApp();
-  const [tab, setTab] = useState('dash');
+  const { T, lang, dark, upd, auth, me, canDo, leads, quotes, surveys, projects = [], inventory = [] } = useApp();
+  const [tab, setTab] = useState(() => (new URLSearchParams(window.location.search).has('mail') ? 'email' : 'dash'));
   const [navOpen, setNavOpen] = useState(false);
   const [palette, setPalette] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -825,19 +1116,74 @@ export default function Admin() {
   if (checking && !auth) return <Boot />;
   if (!auth) return <Login />;
 
-  const badges = { crm: leads.filter((l) => l.stage === 'new').length, quotes: quotes.filter((q) => q.status === 'draft' && !q.converted).length, surveys: surveys.filter((s) => s.status === 'new').length };
-  // Grouped so nine destinations read as three questions: what happened, what's sold, what's published.
-  const groups = [
-    [T('Overview', 'نظرة عامة'), [['dash', LayoutDashboard, T('Dashboard', 'لوحة المؤشرات')]]],
-    [T('Sales', 'المبيعات'), [['crm', Users, 'CRM'], ['quotes', FileText, T('Quotations', 'عروض الأسعار')], ['invoices', Receipt, T('Invoices', 'الفواتير')]]],
-    [T('Finance', 'المالية'), [['accounting', Wallet, T('Accounting', 'المحاسبة')]]],
-    [T('Delivery', 'التنفيذ'), [['surveys', Ruler, T('Site Surveys', 'معاينات المواقع')], ['orders', Hammer, T('Production', 'الطلبات والتنفيذ')]]],
-    [T('Website', 'الموقع'), [['pricing', Tag, T('Calculator & Pricing', 'الحاسبة والأسعار')], ['content', Images, T('Website Content', 'محتوى الموقع')], ['company', Building2, T('Company & Quote Style', 'الشركة وشكل العروض')]]],
+  const lowStockCount = (inventory || []).filter((i) => Number(i.currentQty || 0) <= Number(i.minStock || 0)).length;
+  const badges = {
+    crm: leads.filter((l) => l.stage === 'new').length,
+    quotes: quotes.filter((q) => q.status === 'draft' && !q.converted).length,
+    surveys: surveys.filter((s) => s.status === 'new').length,
+    projects: (projects || []).filter((p) => p.status === 'in_progress').length,
+    inventory: lowStockCount > 0 ? lowStockCount : 0,
+  };
+
+  // Grouped into clear, cohesive ERP business operations
+  const allGroups = [
+    [T('Executive', 'الإدارة العليا'), [
+      ['dash', LayoutDashboard, T('Control Center', 'مركز التحكم والمؤشرات')]
+    ]],
+    [T('Commercial', 'المبيعات والتجاري'), [
+      ['crm', Users, 'CRM'],
+      ['quotes', FileText, T('Quotations', 'عروض الأسعار')],
+      ['invoices', Receipt, T('Invoices', 'الفواتير')]
+    ]],
+    [T('Operations & Costing', 'العمليات والتكاليف'), [
+      ['projects', FolderKanban, T('Projects & Costing', 'المشاريع وتكاليف العمل')],
+      ['inventory', Warehouse, T('Inventory & Materials', 'المستودع والمواد')],
+      ['surveys', Ruler, T('Site Surveys', 'معاينات المواقع')],
+      ['orders', Hammer, T('Workshop Production', 'الورشة والتنفيذ')]
+    ]],
+    [T('Finance', 'المالية'), [
+      ['accounting', Wallet, T('Accounting & P&L', 'المحاسبة والأرباح')]
+    ]],
+    [T('Team', 'فريق العمل'), [
+      ['hr', Briefcase, T('Employees & Attendance', 'الموظفون والدوام')],
+      ['payroll', Banknote, T('Payroll Runs', 'الرواتب والقسائم')]
+    ]],
+    [T('Website', 'الموقع'), [
+      ['pricing', Tag, T('Calculator & Pricing', 'الحاسبة والأسعار')],
+      ['content', Images, T('Website Content', 'محتوى الموقع')],
+      ['company', Building2, T('Company Profile', 'بيانات وشكل الشركة')]
+    ]],
+    [T('Settings', 'الإعدادات'), [
+      ['users', UserCog, T('Users & Permissions', 'المستخدمون والصلاحيات')],
+      ['email', Mail, T('Email', 'البريد الإلكتروني')]
+    ]],
   ];
+  // Staff only see the sections they may view; Users and Email are for full-access admins.
+  const groups = allGroups
+    .map(([label, list]) => [label, list.filter(([id]) => (id === 'email' || id === 'users' ? !!me?.full : canDo(id, 'view')))])
+    .filter(([, list]) => list.length);
   const tabs = groups.flatMap(([, list]) => list);
   const current = tabs.find((t) => t[0] === tab) || tabs[0];
   const groupLabel = (groups.find(([, list]) => list.some(([id]) => id === current[0])) || [])[0] || '';
-  const View = { dash: Dashboard, accounting: Accounting, pricing: Pricing, content: ContentManager, crm: CRM, surveys: Surveys, quotes: Quotes, orders: Orders, invoices: Invoices, company: CompanySettings }[tab] || Dashboard;
+  const viewOnly = !!me && !me.full && current[0] !== 'dash' && !['add', 'edit', 'delete'].some((a) => canDo(current[0], a));
+  const View = {
+    dash: Dashboard,
+    projects: AdminProjects,
+    inventory: AdminInventory,
+    accounting: Accounting,
+    pricing: Pricing,
+    content: ContentManager,
+    crm: CRM,
+    surveys: Surveys,
+    quotes: Quotes,
+    orders: Orders,
+    invoices: Invoices,
+    company: CompanySettings,
+    email: EmailSettings,
+    users: UsersAdmin,
+    hr: HR,
+    payroll: Payroll,
+  }[current[0]] || Dashboard;
 
   const go = (id) => { setTab(id); setPalette(false); setNavOpen(false); };
   const toggleSidebar = () => setCollapsed((v) => {
@@ -855,7 +1201,7 @@ export default function Admin() {
         <div className={`flex h-16 shrink-0 items-center border-b border-line/10 ${collapsed ? 'justify-center px-2' : 'gap-2.5 px-4'}`}>
           {collapsed ? <Mark className="h-8" variant={dark ? 'color' : 'mono-dark'} /> : (
             <>
-              <Logo className="h-8" dark={dark} />
+              <Mark className="h-9 w-9" variant={dark ? 'color' : 'mono-dark'} />
               <span className="ms-auto rounded-full border border-line/12 bg-line/[0.05] px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.14em] text-subtle">{T('Admin', 'الإدارة')}</span>
             </>
           )}
@@ -885,7 +1231,7 @@ export default function Admin() {
 
       {/* ---------- Main column ---------- */}
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="no-print sticky top-0 z-30 flex h-16 items-center gap-2.5 border-b border-line/10 bg-canvas/80 px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-canvas/60 md:px-8">
+        <header className="no-print sticky top-0 z-30 flex h-14 items-center gap-1.5 border-b border-line/10 bg-canvas/80 px-3 backdrop-blur-xl supports-[backdrop-filter]:bg-canvas/60 sm:h-16 sm:gap-2.5 sm:px-4 md:px-8">
           <button type="button" onClick={() => setNavOpen(true)} aria-label={T('Open menu', 'فتح القائمة')} className="icon-btn md:hidden">
             <Menu size={18} />
           </button>
@@ -913,7 +1259,12 @@ export default function Admin() {
           <button type="button" onClick={() => { sb.auth.signOut(); location.assign('/'); }} aria-label={T('Logout', 'خروج')} title={T('Logout', 'خروج')} className="icon-btn"><LogOut size={17} /></button>
         </header>
 
-        <div className="w-full max-w-[1500px] flex-1 px-4 pb-12 pt-5 md:px-8 md:pb-16 md:pt-7">
+        <div className="w-full max-w-[1500px] flex-1 px-3 pb-10 pt-4 sm:px-4 sm:pb-12 sm:pt-5 md:px-8 md:pb-16 md:pt-7">
+          {viewOnly && (
+            <div className="no-print mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] font-semibold text-amber-500">
+              {T('View only — your role cannot add, edit or delete in this section.', 'عرض فقط — صلاحياتك لا تسمح بالإضافة أو التعديل أو الحذف في هذا القسم.')}
+            </div>
+          )}
           <View onNav={go} />
         </div>
       </main>
@@ -922,10 +1273,10 @@ export default function Admin() {
       {navOpen && (
         <div className="fixed inset-0 z-[60] md:hidden">
           <div className="absolute inset-0 animate-fade bg-black/60 backdrop-blur-sm" onClick={() => setNavOpen(false)} aria-hidden="true" />
-          <div className="admin-aside no-print absolute inset-y-0 start-0 flex w-[282px] animate-fade flex-col border-e border-line/10 shadow-lift">
-            <div className="flex h-16 shrink-0 items-center gap-3 border-b border-line/10 px-4">
-              <Logo className="h-8" dark={dark} />
-              <button type="button" onClick={() => setNavOpen(false)} aria-label={T('Close menu', 'إغلاق القائمة')} className="ms-auto grid h-9 w-9 place-items-center rounded-xl text-subtle transition hover:bg-line/10 hover:text-fg">
+          <div className="admin-aside no-print absolute inset-y-0 start-0 flex w-[272px] max-w-[85vw] animate-fade flex-col border-e border-line/10 shadow-lift">
+            <div className="flex h-14 shrink-0 items-center gap-3 border-b border-line/10 px-3.5">
+              <Mark className="h-9 w-9" variant={dark ? 'color' : 'mono-dark'} />
+              <button type="button" onClick={() => setNavOpen(false)} aria-label={T('Close menu', 'إغلاق القائمة')} className="ms-auto grid h-10 w-10 place-items-center rounded-xl text-subtle transition hover:bg-line/10 hover:text-fg">
                 <X size={18} />
               </button>
             </div>

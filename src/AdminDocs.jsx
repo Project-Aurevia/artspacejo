@@ -249,7 +249,7 @@ export function Quotes() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
         <Kpi icon={FileText} label={T('Quotations', 'عروض الأسعار')} value={String(quotes.length)} hint={`${openQ.length} ${T('still open', 'قيد الانتظار')}`} />
         <Kpi icon={TrendingUp} label={T('Open value', 'قيمة العروض المفتوحة')} value={money(openQ.reduce((s, x) => s + totalOf(x), 0))} hint={T('Not invoiced yet', 'لم تُفوتر بعد')} tone="sky" />
         <Kpi icon={CheckCircle2} label={T('Approved, not invoiced', 'معتمدة وغير مفوترة')} value={money(approvedQ.reduce((s, x) => s + totalOf(x), 0))} hint={`${approvedQ.length} ${T('quotes to convert', 'عرض للتحويل')}`} tone="emerald" />
@@ -344,13 +344,13 @@ export function Quotes() {
             )}
           </div>
           <ItemsEditor items={q.items} disabled={lock} onChange={(items) => patch({ items })} />
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
             <Field label={T('Discount (JOD)', 'الخصم (دينار)')} type="number" v={q.discount} on={(discount) => patch({ discount })} disabled={lock} />
             <Field label={T('Valid for (days)', 'صالح لمدة (أيام)')} type="number" v={q.validDays ?? 14} on={(validDays) => patch({ validDays })} />
             <Field label={T('Date', 'التاريخ')} type="date" v={q.date} on={(date) => patch({ date })} />
             <div><label className="label">{T('Status', 'الحالة')}</label><select className="input" value={q.status} onChange={(e) => setStatus(e.target.value)}>{QUOTE_STATUS.map(([k, en, ar]) => <option key={k} value={k}>{lang === 'ar' ? ar : en}</option>)}</select></div>
           </div>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-[#C9A45C]" checked={q.vat} disabled={lock} onChange={(e) => patch({ vat: e.target.checked })} />{T('Apply VAT', 'تطبيق الضريبة')} {rates.vat}%</label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted"><input type="checkbox" className="h-4 w-4 shrink-0 accent-gold" checked={q.vat} disabled={lock} onChange={(e) => patch({ vat: e.target.checked })} />{T('Apply VAT', 'تطبيق الضريبة')} <span className="tabular-nums">{rates.vat}%</span></label>
           <div className="grid gap-3 sm:grid-cols-2">
             <div><label className="label">{T('Intro text (EN)', 'نص تمهيدي (EN)')}</label><textarea className="input" rows="2" value={q.intro?.en || ''} onChange={(e) => patch({ intro: { ...q.intro, en: e.target.value } })} /></div>
             <div><label className="label">{T('Intro text (AR)', 'نص تمهيدي (عربي)')}</label><textarea className="input" rows="2" dir="rtl" value={q.intro?.ar || ''} onChange={(e) => patch({ intro: { ...q.intro, ar: e.target.value } })} /></div>
@@ -393,7 +393,7 @@ export function Orders() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
         <Kpi icon={FileText} label={T('Orders', 'الطلبات')} value={String(orders.length)} hint={`${orders.filter((o) => !['done'].includes(o.stage)).length} ${T('in progress', 'قيد التنفيذ')}`} />
         <Kpi icon={TrendingUp} label={T('Pipeline value', 'قيمة قيد التنفيذ')} value={money(orders.filter((o) => o.stage !== 'done').reduce((s, o) => s + Number(o.total || 0), 0))} hint={T('Open orders at quoted value', 'طلبات مفتوحة بقيمتها')} tone="sky" />
         <Kpi icon={Clock} label={T('In the workshop', 'في الورشة')} value={String(inProduction.length)} hint={T('Production & installation', 'تنفيذ وتركيب')} tone="terra" />
@@ -479,18 +479,32 @@ export function Orders() {
 
 /* ================= Invoices ================= */
 export function Invoices() {
-  const { T, lang, invoices, leads, customers, rates, money, upd, company } = useApp();
+  const { T, lang, invoices, leads, customers, projects = [], addProject, rates, money, upd, company } = useApp();
   const [id, setId] = useState(null);
   const [mode, setMode] = useState('edit');
   const [dl, setDl] = useState(lang);
   const [pay, setPay] = useState({ label: '', amount: '' });
   const [creating, setCreating] = useState(null); // null = closed, '' = open with nothing picked yet
+  const [newInvProjectChoice, setNewInvProjectChoice] = useState('');
+  const [newInvProjectTitle, setNewInvProjectTitle] = useState('');
+  const [invoiceWantsNewProject, setInvoiceWantsNewProject] = useState(false);
+  const [invoiceNewProjectTitle, setInvoiceNewProjectTitle] = useState('');
   const [find, setFind] = useState('');
+  const [invPrj, setInvPrj] = useState('');
   const inv = invoices.find((i) => i.id === id);
   const client = inv && clientOf(inv, customers, leads);
   const clientName = (doc) => { const c = clientOf(doc, customers, leads); return c ? [c.company, c.name].filter(Boolean).join(' · ') : ''; };
   const paidOf = (i) => i.payments.reduce((s, p) => s + Number(p.amount), 0);
   const patch = (p) => upd((o) => ({ invoices: o.invoices.map((i) => (i.id === id ? { ...i, ...p } : i)) }));
+  const latestProjectFor = (customerId, leadId) => (projects || []).find((p) => (customerId && p.customerId === customerId) || (leadId && p.clientId === leadId));
+  const projectName = (pid) => {
+    const p = (projects || []).find((x) => x.id === pid);
+    return p ? `${p.no} — ${p.title}` : '—';
+  };
+  useEffect(() => {
+    setInvoiceWantsNewProject(false);
+    setInvoiceNewProjectTitle('');
+  }, [id]);
   const addPay = (e) => {
     e.preventDefault();
     patch({ payments: [...inv.payments, { id: uid('p'), label: pay.label || T('Payment', 'دفعة'), amount: parseFloat(pay.amount) || 0, date: today() }] });
@@ -499,14 +513,48 @@ export function Invoices() {
   const create = (e) => {
     e.preventDefault();
     const c = customers.find((x) => x.id === creating);
-    const ni = { id: uid('inv'), no: nextNo(invoices, 'INV'), customerId: c?.id || '', clientId: c?.leadId || '', date: today(), due: addDays(today(), 30), vat: true, vatRate: rates.vat, discount: 0, items: [], payments: [] };
+    const leadId = c?.leadId || '';
+    let projectId = '';
+    if (newInvProjectChoice === '__new') {
+      const ttl = String(newInvProjectTitle || '').trim() || `${c?.company || c?.name || T('New Project', 'مشروع جديد')} — ${today()}`;
+      const p = addProject({
+        title: ttl,
+        customerId: c?.id || '',
+        clientId: leadId,
+        status: 'planning',
+        notes: T('Created from Sales Invoice workflow', 'تم إنشاؤه من مسار فاتورة مبيعات'),
+      });
+      projectId = p.id;
+    } else if (newInvProjectChoice) {
+      projectId = newInvProjectChoice;
+    } else {
+      projectId = latestProjectFor(c?.id || '', leadId)?.id || '';
+    }
+    const ni = {
+      id: uid('inv'),
+      no: nextNo(invoices, 'INV'),
+      customerId: c?.id || '',
+      clientId: leadId,
+      projectId,
+      date: today(),
+      due: addDays(today(), 30),
+      vat: true,
+      vatRate: rates.vat,
+      discount: 0,
+      items: [],
+      payments: [],
+    };
     upd((o) => ({ invoices: [ni, ...o.invoices] })); setCreating(null); setId(ni.id); setMode('edit');
+    setNewInvProjectChoice('');
+    setNewInvProjectTitle('');
   };
   const remove = () => { if (confirm(T('Delete this invoice?', 'حذف الفاتورة؟'))) { upd((o) => ({ invoices: o.invoices.filter((i) => i.id !== id) })); setId(null); } };
   const presets = [T('Down Payment / عربون', 'عربون / Down Payment'), T('Milestone / دفعة مرحلية', 'دفعة مرحلية / Milestone'), T('Delivery / دفعة تسليم', 'دفعة تسليم / Delivery')];
   const t = inv && totals(inv, rates.vat);
   const term = find.trim().toLowerCase();
-  const shownI = term ? invoices.filter((i) => `${i.no} ${clientName(i)}`.toLowerCase().includes(term)) : invoices;
+  const shownI = invoices
+    .filter((i) => !invPrj || (invPrj === '__none' ? !i.projectId : i.projectId === invPrj))
+    .filter((i) => !term || `${i.no} ${clientName(i)} ${projectName(i.projectId)}`.toLowerCase().includes(term));
 
   const views = invoices.map((i) => invoiceView(i, rates.vat));
   const invoiced = views.reduce((s, v) => s + v.total, 0);
@@ -514,11 +562,31 @@ export function Invoices() {
   const outstanding = views.reduce((s, v) => s + Math.max(0, v.balance), 0);
   const late = views.filter((v) => v.overdue);
 
-  const openNew = () => setCreating('');
+  const openNew = () => {
+    setCreating('');
+    setNewInvProjectChoice('');
+    setNewInvProjectTitle('');
+  };
+
+  const createProjectForInvoice = () => {
+    if (!inv) return;
+    const ttl = String(invoiceNewProjectTitle || '').trim() || `${clientName(inv) || inv.no} — ${T('Project', 'مشروع')}`;
+    const p = addProject({
+      title: ttl,
+      customerId: inv.customerId || '',
+      clientId: inv.clientId || '',
+      status: 'planning',
+      budgetRevenue: totals(inv, rates.vat).after,
+      notes: T('Created and linked from Sales Invoice', 'تم الإنشاء والربط من فاتورة المبيعات'),
+    });
+    patch({ projectId: p.id });
+    setInvoiceWantsNewProject(false);
+    setInvoiceNewProjectTitle('');
+  };
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
         <Kpi icon={Wallet} label={T('Invoiced', 'المفوتر')} value={money(invoiced)} hint={`${invoices.length} ${T('invoices', 'فاتورة')}`} />
         <Kpi icon={CheckCircle2} label={T('Collected', 'المحصّل')} value={money(collected)} hint={`${invoiced ? Math.round((collected / invoiced) * 100) : 0}% ${T('of invoiced', 'من المفوتر')}`} tone="emerald" />
         <Kpi icon={Clock} label={T('Outstanding', 'المتبقي')} value={money(outstanding)} hint={T('Across all invoices', 'على كل الفواتير')} tone="terra" />
@@ -530,6 +598,11 @@ export function Invoices() {
           <Search size={15} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-subtle" aria-hidden="true" />
           <input value={find} onChange={(e) => setFind(e.target.value)} className="input ps-9" placeholder={T('Search by number or client…', 'ابحث بالرقم أو العميل…')} aria-label={T('Search invoices', 'ابحث في الفواتير')} />
         </div>
+        <select className="input !w-auto !py-2 !text-xs" value={invPrj} onChange={(e) => setInvPrj(e.target.value)} aria-label={T('Filter by project', 'تصفية حسب المشروع')}>
+          <option value="">{T('All projects', 'كل المشاريع')}</option>
+          <option value="__none">{T('No project', 'بدون مشروع')}</option>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.no} — {p.title}</option>)}
+        </select>
         <span className="hidden text-xs tabular-nums text-subtle sm:inline">{shownI.length} / {invoices.length}</span>
         <button className="btn-terra ms-auto" onClick={openNew}><Plus size={15} />{T('New invoice', 'فاتورة جديدة')}</button>
       </div>
@@ -538,8 +611,8 @@ export function Invoices() {
         <table className="w-full text-sm">
           <thead>
             <tr>
-              {['#', T('Client', 'العميل'), T('Total', 'الإجمالي'), T('Paid', 'المدفوع'), T('Remaining', 'المتبقي'), T('Due', 'الاستحقاق')].map((h, i) => (
-                <th key={h} className={`p-3 whitespace-nowrap ${i >= 2 && i <= 4 ? 'text-end' : 'text-start'}`}>{h}</th>
+              {['#', T('Client', 'العميل'), T('Project', 'المشروع'), T('Total', 'الإجمالي'), T('Paid', 'المدفوع'), T('Remaining', 'المتبقي'), T('Due', 'الاستحقاق')].map((h, i) => (
+                <th key={h} className={`p-3 whitespace-nowrap ${i >= 3 && i <= 5 ? 'text-end' : 'text-start'}`}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -550,6 +623,7 @@ export function Invoices() {
                 <tr key={i.id} onClick={() => { setId(i.id); setMode('edit'); }} className="cursor-pointer border-t border-line/10">
                   <td className="whitespace-nowrap p-3 font-semibold">{i.no}</td>
                   <td className="min-w-[140px] p-3">{clientName(i) || '—'}</td>
+                  <td className="min-w-[180px] p-3 text-xs text-subtle">{i.projectId ? projectName(i.projectId) : '—'}</td>
                   <td className="p-3 text-end tabular-nums">{money(v.total)}</td>
                   <td className="p-3 text-end tabular-nums text-emerald-500">{money(v.paid)}</td>
                   <td className={`p-3 text-end font-bold tabular-nums ${v.balance > 0.005 ? 'text-terra' : 'text-subtle'}`}>{money(v.balance)}</td>
@@ -563,7 +637,7 @@ export function Invoices() {
             })}
             {!shownI.length && (
               <tr>
-                <td colSpan="6" className="p-0">
+                <td colSpan="7" className="p-0">
                   <EmptyState
                     icon={Wallet}
                     title={invoices.length ? T('No invoice matches that search.', 'لا توجد فاتورة مطابقة.') : T('No invoices yet.', 'لا فواتير بعد.')}
@@ -580,6 +654,17 @@ export function Invoices() {
       {creating !== null && <Modal title={T('New invoice', 'فاتورة جديدة')} onClose={() => setCreating(null)}>
         <form onSubmit={create} className="space-y-3">
           <EntityPicker kind="customer" label={T('Customer', 'العميل')} value={creating} onPick={(c) => setCreating(c ? c.id : '')} placeholder={T('Search a saved customer, or add a new company…', 'ابحث عن عميل محفوظ أو أضف شركة جديدة…')} />
+          <div>
+            <label className="label">{T('Related project', 'المشروع المرتبط')}</label>
+            <select className="input" value={newInvProjectChoice} onChange={(e) => setNewInvProjectChoice(e.target.value)}>
+              <option value="">{T('Auto-link by customer (if found)', 'ربط تلقائي حسب العميل (إن وجد)')}</option>
+              <option value="__new">{T('+ Create new project…', '+ إنشاء مشروع جديد…')}</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.no} — {p.title}</option>)}
+            </select>
+            {newInvProjectChoice === '__new' && (
+              <input className="input mt-2" value={newInvProjectTitle} onChange={(e) => setNewInvProjectTitle(e.target.value)} placeholder={T('New project title', 'عنوان المشروع الجديد')} />
+            )}
+          </div>
           <p className="text-xs leading-relaxed text-subtle">{T('Customers are stored in Finance › Directory, so the next document picks them in one click.', 'يُحفظ العميل في المالية › العملاء والموردون، فيظهر في المستند التالي بنقرة واحدة.')}</p>
           <button className="btn-gold w-full" disabled={!creating}>{T('Create', 'إنشاء')}</button>
         </form>
@@ -591,7 +676,7 @@ export function Invoices() {
           <button type="button" className="btn-ghost btn-sm no-print ms-auto text-red-400" onClick={remove}><Trash2 size={14} />{T('Delete', 'حذف')}</button>
         </div>
 
-        <div className="mb-4 grid gap-2 sm:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Money label={T('Total', 'الإجمالي')} value={money(t.total)} />
           <Money label={T('Paid', 'المدفوع')} value={money(paidOf(inv))} tone="text-emerald-500" />
           <Money label={T('Remaining', 'المتبقي')} value={money(t.total - paidOf(inv))} tone={t.total - paidOf(inv) > 0.005 ? 'text-terra' : 'text-emerald-500'} />
@@ -603,12 +688,37 @@ export function Invoices() {
           <FitDoc kind="invoice" dl={dl} doc={{ ...inv, vatRate: inv.vatRate ?? rates.vat }} client={client} company={company} />
         </> : <div className="space-y-5">
           <EntityPicker kind="customer" label={T('Customer', 'العميل')} value={inv.customerId || ''} nameFallback={client?.name || ''} onPick={(c) => patch({ customerId: c ? c.id : '', clientId: c ? c.leadId || inv.clientId || '' : inv.clientId || '' })} />
+          <div>
+            <label className="label">{T('Related project', 'المشروع المرتبط')}</label>
+            <select
+              className="input"
+              value={inv.projectId || ''}
+              onChange={(e) => {
+                if (e.target.value === '__new') {
+                  setInvoiceWantsNewProject(true);
+                  return;
+                }
+                setInvoiceWantsNewProject(false);
+                patch({ projectId: e.target.value });
+              }}
+            >
+              <option value="">{T('No project linked', 'بدون ربط مشروع')}</option>
+              <option value="__new">{T('+ Create new project…', '+ إنشاء مشروع جديد…')}</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.no} — {p.title}</option>)}
+            </select>
+            {invoiceWantsNewProject && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <input className="input min-w-[220px] flex-1" value={invoiceNewProjectTitle} onChange={(e) => setInvoiceNewProjectTitle(e.target.value)} placeholder={T('New project title', 'عنوان المشروع الجديد')} />
+                <button type="button" className="btn-gold btn-sm" onClick={createProjectForInvoice}>{T('Create & link', 'إنشاء وربط')}</button>
+              </div>
+            )}
+          </div>
           <ItemsEditor items={inv.items} onChange={(items) => patch({ items })} />
           <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field label={T('Date', 'التاريخ')} type="date" v={inv.date} on={(date) => patch({ date })} />
             <Field label={T('Due date', 'تاريخ الاستحقاق')} type="date" v={inv.due || dueOf(inv)} on={(due) => patch({ due })} />
             <Field label={T('Discount (JOD)', 'الخصم (دينار)')} type="number" v={inv.discount} on={(discount) => patch({ discount })} />
-            <label className="flex items-center gap-2 pb-2.5 text-sm"><input type="checkbox" className="accent-[#C9A45C]" checked={inv.vat} onChange={(e) => patch({ vat: e.target.checked })} />{T('Apply VAT', 'تطبيق الضريبة')} {inv.vatRate ?? rates.vat}%</label>
+            <label className="flex cursor-pointer items-center gap-2 pb-2.5 text-sm text-muted"><input type="checkbox" className="h-4 w-4 shrink-0 accent-gold" checked={inv.vat} onChange={(e) => patch({ vat: e.target.checked })} />{T('Apply VAT', 'تطبيق الضريبة')} <span className="tabular-nums">{inv.vatRate ?? rates.vat}%</span></label>
           </div>
 
           <div>

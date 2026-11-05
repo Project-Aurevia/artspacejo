@@ -2,39 +2,75 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Mont';
+  src: url('/fonts/Mont-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Mont';
+  src: url('/fonts/Mont-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Mont';
+  src: url('/fonts/Mont-Black.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DIN Next LT Arabic';
+  src: url('/fonts/DINNextLTArabic-REGULAR.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DIN Next LT Arabic';
+  src: url('/fonts/DINNextLTArabic-BOLD.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ============================================================
    Design tokens
    ============================================================ */
 @layer base {
   :root {
-    --canvas: 251 247 241;
+    --canvas: 250 246 240;
     --surface: 255 255 255;
-    --surface-2: 246 241 234;
-    --surface-3: 238 230 220;
-    --line: 24 21 18;
+    --surface-2: 245 239 231;
+    --surface-3: 236 227 216;
+    --line: 22 20 18;
     --fg: 22 20 18;
-    --fg-muted: 92 85 77;
-    --fg-subtle: 116 108 98;
-    --accent: 201 164 92;
-    --accent-strong: 122 90 24;
-    /* Gold that still passes contrast at 10–11px on the cream canvas. */
-    --accent-text: 146 108 36;
+    --fg-muted: 95 86 78;
+    --fg-subtle: 120 110 100;
+    --accent: 196 96 56;
+    --accent-strong: 168 82 46;
+    /* High contrast text token */
+    --accent-text: 168 82 46;
     --ease: cubic-bezier(.22, 1, .36, 1);
     color-scheme: light;
   }
 
   .dark {
-    --canvas: 12 12 13;
-    --surface: 20 19 20;
-    --surface-2: 26 25 26;
-    --surface-3: 34 32 33;
+    --canvas: 22 20 18;
+    --surface: 30 27 24;
+    --surface-2: 38 34 30;
+    --surface-3: 48 43 38;
     --line: 255 255 255;
-    --fg: 243 237 229;
-    --fg-muted: 168 160 150;
-    --fg-subtle: 130 123 115;
-    --accent: 214 180 116;
-    --accent-strong: 224 196 138;
-    --accent-text: 224 196 138;
+    --fg: 250 246 240;
+    --fg-muted: 172 163 152;
+    --fg-subtle: 136 128 118;
+    --accent: 196 160 92;
+    --accent-strong: 222 213 161;
+    --accent-text: 222 213 161;
     color-scheme: dark;
   }
 
@@ -52,7 +88,7 @@
   [dir='rtl'] button,
   [dir='rtl'] input,
   [dir='rtl'] select,
-  [dir='rtl'] textarea { font-family: 'IBM Plex Sans Arabic', 'Tajawal', system-ui, sans-serif; }
+  [dir='rtl'] textarea { font-family: 'DIN Next LT Arabic', 'IBM Plex Sans Arabic', 'Tajawal', system-ui, sans-serif; }
 
   ::selection { background: rgb(var(--accent) / .3); color: rgb(var(--fg)); }
 
@@ -280,11 +316,13 @@
     animation: shimmer 1.6s infinite;
   }
 
-  /* Modals share the glass stack, but stay opaque enough for forms to read on top. */
+  /* Modals share the glass stack, but stay opaque enough for forms to read on top.
+     Background is a *colour* (not a gradient image) so a caller can swap it with
+     `!bg-ink` — the photo-lightbox does exactly that. */
   .dialog-panel {
     border: 1px solid rgb(var(--line) / .1);
     border-radius: 28px;
-    background: linear-gradient(180deg, rgb(var(--surface) / .96) 0%, rgb(var(--surface) / .92) 100%);
+    background-color: rgb(var(--surface));
     -webkit-backdrop-filter: blur(28px) saturate(160%);
     backdrop-filter: blur(28px) saturate(160%);
     box-shadow:
@@ -292,12 +330,14 @@
       0 40px 120px -40px rgb(0 0 0 / .7);
     max-height: 92vh;
     overflow: auto;
+    overscroll-behavior: contain;
   }
   .dark .dialog-panel {
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / .10),
       0 40px 120px -40px rgb(0 0 0 / .95);
   }
+  .dark .dialog-panel { border-color: rgb(255 255 255 / .1); }
 
   /* ---------- editorial type ---------- */
   .eyebrow {
@@ -514,6 +554,54 @@
     font-weight: 700;
     box-shadow: 0 12px 26px -18px rgb(201 164 92 / .9);
   }
+}
+
+/* ============================================================
+   Mobile refinements (≤ 767px)
+   ------------------------------------------------------------
+   A phone is not a narrow desktop: fields need 16px text so iOS
+   stops zooming on focus, thumb-driven controls need a 44px hit
+   area, and dense admin tables should scroll sideways instead of
+   squeezing every column into an unreadable sliver.
+
+   Every selector is rooted at `body` on purpose: the generated
+   utilities are emitted after this block, so a plain `.btn` rule
+   would lose to `.px-5`. Rooting at `body` raises the specificity
+   to (0,1,1) and wins without having to out-!important Tailwind.
+   ============================================================ */
+@media (max-width: 767px) {
+  /* --- forms: 16px is the iOS zoom threshold --- */
+  body .input,
+  body .input[type='number'],
+  body select.input,
+  body textarea.input { font-size: 16px !important; }
+
+  /* --- touch targets: 44px minimum for thumb-driven controls --- */
+  body .btn { min-height: 2.75rem; padding-inline: 1.1rem; }
+  body .btn-sm { min-height: 2.35rem; padding-inline: .85rem; font-size: .8125rem; }
+  body .btn-lg { min-height: 3rem; }
+  body .icon-btn { width: 2.5rem; height: 2.5rem; }
+  body .chip { padding: .5rem .85rem; }
+  body .seg-tab { padding: .55rem .85rem; font-size: .8125rem; }
+  body .nav-item { padding-block: .7rem; }
+  body .seg { padding: 3px; }
+
+  /* the segmented control scrolls on phones; hide its stray scrollbar */
+  .seg { scrollbar-width: none; -ms-overflow-style: none; }
+  .seg::-webkit-scrollbar { display: none; height: 0; }
+
+  /* --- tables: keep column labels legible, let the wrapper scroll --- */
+  body .glass table { min-width: 34rem; }
+  body .glass table th,
+  body .glass table td { padding: .6rem .55rem; }
+
+  /* --- KPI cards: 2-up grids need a tighter type scale --- */
+  body .stat-card { padding: .9rem 1rem !important; }
+  body .stat-label { font-size: 9px; letter-spacing: .1em; }
+  body .stat-value { font-size: 1.35rem !important; line-height: 1.15; }
+
+  /* --- dialogs: fill the viewport instead of floating in a stamp --- */
+  body .dialog-panel { border-radius: 22px; max-height: calc(100dvh - 2rem); }
 }
 
 /* ============================================================

@@ -29,9 +29,6 @@
     <meta name="twitter:description" content="Signage, booths, printing, social media & marketing strategy in Amman, Jordan." />
     <meta name="twitter:image" content="/og-image.png" />
     <!--SEO_JSONLD-->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <script>
       // Apply the stored theme + language before first paint so there is no flash of the wrong palette.
       // Mirrors the one-time migration in store.jsx: pre-v2 state defaults to the light editorial palette.
@@ -46,7 +43,25 @@
     </script>
   </head>
   <body>
-    <noscript>Art Space | مساحة الفن — Signage, printing, social media & marketing in Amman, Jordan. Please enable JavaScript.</noscript>
+    <!-- Fallback for crawlers and agents that do not execute JavaScript. The interactive site
+         needs JS, but the content does not: these are real server-rendered pages. -->
+    <noscript>
+      <div style="max-width:44rem;margin:0 auto;padding:2rem 1.25rem;font-family:system-ui,sans-serif;line-height:1.7">
+        <h1 style="font-size:1.5rem">Art Space — مساحة الفن</h1>
+        <p>Signage, facades, exhibition booths, printing, social media management and marketing
+          strategy in Amman, Jordan. Enable JavaScript for the instant price calculator, or open a
+          service page:</p>
+        <ul>
+          <li><a href="/en/signage-amman">Signage company in Amman</a> · <a href="/ar/signage-amman">شركة لوحات إعلانية في عمّان</a></li>
+          <li><a href="/en/exhibition-booths-jordan">Exhibition booth design and build</a> · <a href="/ar/exhibition-booths-jordan">تصميم وتنفيذ بوثات المعارض</a></li>
+          <li><a href="/en/printing-amman">Printing in Amman</a> · <a href="/ar/printing-amman">مطابع في عمّان</a></li>
+          <li><a href="/en/social-media-management-amman">Social media management</a> · <a href="/ar/social-media-management-amman">إدارة السوشيال ميديا</a></li>
+          <li><a href="/en/marketing-consulting-jordan">Marketing consulting and research</a> · <a href="/ar/marketing-consulting-jordan">استشارات تسويقية ودراسات سوق</a></li>
+          <li><a href="/en/signage-prices-jordan">Signage prices in Jordan</a> · <a href="/ar/signage-prices-jordan">أسعار اللوحات الإعلانية</a></li>
+        </ul>
+        <p>Amman, Jordan · <a href="tel:+962786165737" dir="ltr">+962 7 8616 5737</a></p>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

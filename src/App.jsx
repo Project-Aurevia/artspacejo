@@ -29,14 +29,14 @@ class ErrorBoundary extends React.Component {
     if (!error) return this.props.children;
     const reload = () => window.location.reload();
     return (
-      <div dir="rtl" className="min-h-screen bg-ink text-cream grid place-items-center p-6">
-        <div className="max-w-md text-center">
-          <h1 className="text-xl font-bold text-gold mb-2">تعذر تحميل لوحة التحكم</h1>
-          <p className="text-sm opacity-70 mb-1">Could not load the admin panel.</p>
-          <p className="text-xs opacity-50 mb-5 break-words">{String(error?.message || error)}</p>
-          <div className="flex gap-2 justify-center">
-            <button type="button" onClick={reload} className="btn-gold">إعادة المحاولة / Retry</button>
-            <a href="/" className="btn-ghost">الموقع / Website</a>
+      <div dir="rtl" className="grid min-h-screen place-items-center bg-canvas p-6 text-fg">
+        <div className="max-w-md rounded-3xl border border-line/10 bg-surface p-7 text-center shadow-soft">
+          <h1 className="mb-2 font-ar text-xl font-bold text-fg">تعذر تحميل لوحة التحكم</h1>
+          <p className="mb-1 text-sm text-muted">Could not load the admin panel.</p>
+          <p className="mb-5 break-words text-xs text-subtle" dir="ltr">{String(error?.message || error)}</p>
+          <div className="flex justify-center gap-2">
+            <button type="button" onClick={reload} className="btn btn-gold">إعادة المحاولة / Retry</button>
+            <a href="/" className="btn btn-ghost">الموقع / Website</a>
           </div>
         </div>
       </div>
@@ -48,7 +48,7 @@ export default function App() {
   if (!isAdmin()) return <Site />;
   return (
     <ErrorBoundary>
-      <Suspense fallback={<div className="min-h-screen bg-ink" />}>
+      <Suspense fallback={<div className="min-h-screen bg-canvas" role="status" aria-label="Loading admin" />}>
         <Admin />
       </Suspense>
     </ErrorBoundary>

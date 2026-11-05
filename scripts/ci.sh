@@ -13,9 +13,13 @@ PORT="${PORT:-3311}"
 export PORT
 export BASE="http://127.0.0.1:$PORT"
 export DATA_DIR="${DATA_DIR:-$(mktemp -d)}"
-export ADMIN_PASSWORD="${ADMIN_PASSWORD:-ci-password-12345678}"
+mkdir -p "$DATA_DIR"
+if [ -d "$ROOT/data" ]; then
+  cp -r "$ROOT/data"/* "$DATA_DIR"/ 2>/dev/null || true
+fi
+: "${E2E_PASSWORD:?Set E2E_PASSWORD (the owner password) to run the end-to-end checks}"
+export E2E_PASSWORD
 export NODE_ENV=production
-# The production guard refuses short/placeholder passwords — this one is deliberately random-ish.
 unset SITE_URL TRUST_PROXY
 
 if [ "${SKIP_BUILD:-0}" != "1" ]; then

@@ -138,19 +138,24 @@ const monthLabel = (key) => {
 /**
  * One call, one object. Everything the accounting tab needs.
  *
- *  - revenue      = invoiced totals, VAT included (a customer's bill, not our money)
- *  - salesNet     = revenue without output VAT — what we actually earned
- *  - purchasesNet = supplier bills without input VAT — what the job cost us
- *  - petty        = every pocket-money expense (already VAT-inclusive cash)
- *  - netProfit    = salesNet − purchasesNet − petty
- *  - vatDue       = output VAT − input VAT (what goes to the tax office)
- *  - cashOnHand   = remainder of the most recent petty-cash day
+ *  - revenue           = invoiced totals, VAT included (a customer's bill, not our money)
+ *  - salesNet          = revenue without output VAT — what we actually earned
+ *  - purchasesNet      = supplier bills without input VAT — what the job cost us
+ *  - petty             = every pocket-money expense (already VAT-inclusive cash)
+ *  - payrollCost       = approved payroll runs (net wages + employer social security share)
+ *  - grossProfit       = salesNet − purchasesNet (COGS)
+ *  - operatingExpenses = petty + payrollCost
+ *  - netProfit         = grossProfit − operatingExpenses (true operating income)
+ *  - vatDue            = output VAT − input VAT (what goes to the tax office)
+ *  - cashOnHand        = remainder of the most recent petty-cash day
+ *  - arAging / apAging = 0-30, 31-60, 61-90, 90+ days aging buckets
  */
 export function accountingSummary({
   invoices = [],
   quotes = [],
   purchases = [],
   cash = [],
+  payrolls = [],
   rates = {},
   today = todayStr(),
   months = 6,
@@ -195,6 +200,44 @@ export function accountingSummary({
     return { key, en, ar, value: r2(value), count };
   }).filter((c) => c.count);
 
+  /* ---- payroll integration (salaries + employer SSC share) ---- */
+  const approvedPayrolls = (payrolls || []).filter((p) => p.status === 'approved' || p.status === 'paid' || p.locked);
+  let totalSalaries = 0;
+  let totalSscCompany = 0;
+  approvedPayrolls.forEach((pr) => {
+    (pr.lines || []).forEach((line) => {
+      totalSalaries += Number(line.net || line.gross || 0);
+      totalSscCompany += Number(line.sscCompany || 0);
+    });
+  });
+  const payrollCost = r2(totalSalaries + totalSscCompany);
+
+  /* ---- aging buckets for AR (receivables) and AP (payables) ---- */
+  const computeAging = (items) => {
+    const buckets = { current: 0, days30: 0, days60: 0, days90Plus: 0 };
+    const todayDate = new Date(today);
+    items.forEach((item) => {
+      const balance = Number(item.balance || 0);
+      if (balance <= 0) return;
+      const dueStr = item.due || item.date || today;
+      const dueDate = new Date(dueStr);
+      const diffDays = Math.floor((todayDate - dueDate) / (1000 * 60 * 60 * 24));
+      if (diffDays <= 0) buckets.current += balance;
+      else if (diffDays <= 30) buckets.days30 += balance;
+      else if (diffDays <= 60) buckets.days60 += balance;
+      else buckets.days90Plus += balance;
+    });
+    return {
+      current: r2(buckets.current),
+      days30: r2(buckets.days30),
+      days60: r2(buckets.days60),
+      days90Plus: r2(buckets.days90Plus),
+    };
+  };
+
+  const arAging = computeAging(inv);
+  const apAging = computeAging(pur);
+
   /* ---- who actually paid (cash box, company account, each partner) ---- */
   const payerTotals = {};
   const addPayer = (id, value) => { const k = id || 'company'; payerTotals[k] = (payerTotals[k] || 0) + Number(value || 0); };
@@ -206,11 +249,13 @@ export function accountingSummary({
   const partnerOut = r2(byPayer.filter((p) => isPartner(p.id)).reduce((s, p) => s + p.value, 0));
   const paidByCompany = r2(payerTotals.company || 0);
 
-  /* ---- result ---- */
+  /* ---- true multi-step income result ---- */
   const grossProfit = r2(salesNet - purchasesNet);
-  const netProfit = r2(grossProfit - petty);
+  const operatingExpenses = r2(petty + payrollCost);
+  const netProfit = r2(grossProfit - operatingExpenses);
   const vatDue = r2(salesVat - purchasesVat);
   const margin = salesNet ? (netProfit / salesNet) * 100 : 0;
+  const grossMargin = salesNet ? (grossProfit / salesNet) * 100 : 0;
 
   /* ---- month buckets ---- */
   const anchor = parseDay(today) || new Date();
@@ -279,12 +324,15 @@ export function accountingSummary({
     /* purchases */
     purchasesNet, purchasesVat, purchasesGross, supplierPaid, payables, payablesOverdue,
     purchaseCount: pur.length, latePurchaseCount: latePurchases.length,
-    /* daily expenses */
+    /* daily expenses & payroll */
     petty, pettyCash, pettyOutside, pettyDays: days.length, cashOnHand, latestDay: latest, pettyByCat,
+    payrollCost, operatingExpenses,
     /* who paid */
     byPayer, partnerOut, paidByCompany,
     /* result */
-    grossProfit, netProfit, vatDue, margin,
+    grossProfit, grossMargin, netProfit, vatDue, margin,
+    /* aging */
+    arAging, apAging,
     /* breakdowns */
     byMonth, byCat, topSuppliers, pipeline, approved,
     openQuoteCount: openQuotes.length, approvedQuoteCount: approvedQuotes.length,

@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { sb, submitForm } from './api.js';
+import { DEFAULT_HR, migrateHR } from './payroll.js';
+import { can, canAny, COL_MODULES, SETTING_MODULES } from '../server/perms.js';
 
 const KEY = 'artspace_jo_v1';
 export const uid = (p = 'id') => p + Math.random().toString(36).slice(2, 8);
@@ -101,10 +103,37 @@ export const SURVEY_STATUS = [
   ['done', 'Completed', 'منجز'],
   ['cancelled', 'Cancelled', 'ملغي'],
 ];
-const COLLECTIONS = ['leads', 'quotes', 'orders', 'invoices', 'surveys', 'purchases', 'cash', 'customers', 'suppliers'];
-const SETTINGS_KEYS = ['rates', 'content', 'company'];
+
+export const PROJECT_STATUSES = [
+  ['planning', 'Planning & Design', 'التخطيط والتصميم', '#C4A05C'],
+  ['in_progress', 'Fabrication', 'قيد التصنيع بالورشة', '#C46038'],
+  ['installation', 'Installation', 'قيد التركيب بالموقع', '#4FA3D1'],
+  ['completed', 'Completed & Handed Over', 'مكتمل ومسلّم', '#10B981'],
+  ['on_hold', 'On Hold', 'معلق', '#9CA3AF'],
+];
+
+export const INVENTORY_CATS = [
+  ['sheets', 'Sheets & Panels', 'ألواح وتكسيات'],
+  ['lighting', 'Lighting & Power', 'إنارة ومحولات'],
+  ['media', 'Rolls & Print Media', 'رولات ومواد طباعة'],
+  ['hardware', 'Hardware & Accessories', 'إكسسوارات ومثبتات'],
+  ['profiles', 'Iron & Aluminum Profiles', 'تيوبات وبروفايلات'],
+  ['ink', 'Inks & Chemicals', 'أحبار وسوائل'],
+];
+
+// No demo stock is shipped: the warehouse starts empty and is filled by the team.
+// No demo stock is shipped: the warehouse starts empty and is filled by the team.
+export const DEFAULT_INVENTORY = [];
+
+const COLLECTIONS = ['leads', 'quotes', 'orders', 'invoices', 'surveys', 'purchases', 'cash', 'customers', 'suppliers', 'employees', 'attendance', 'advances', 'payrolls', 'projects', 'inventory', 'stock_movements'];
+const SETTINGS_KEYS = ['rates', 'content', 'company', 'hr'];
 /** State slices that live on the server. Used for change tracking so a save only sends what changed. */
 const SYNCABLE = [...SETTINGS_KEYS, ...COLLECTIONS];
+/** An empty copy of every private slice — the starting point on load and after logout. */
+const blankCollections = () => {
+  const base = Object.fromEntries(COLLECTIONS.map((k) => [k, []]));
+  return base;
+};
 
 /** Pick the department that carries most of the value in a cart / item list. */
 export const categorize = (items = []) => {
@@ -119,11 +148,11 @@ export const DEFAULT_COMPANY = {
   name: { en: 'Art Space', ar: 'مساحة الفن' },
   tagline: { en: 'Advertising · Signage · Printing · Marketing', ar: 'دعاية · آرمات · مطبوعات · تسويق' },
   logo: '',
-  phone: '+962 6 555 0100',
-  email: 'hello@artspace.jo',
-  website: 'www.artspace.jo',
+  phone: '+962 7 8616 5737',
+  email: '',
+  website: 'www.artspacejo.com',
   address: { en: 'Amman, Jordan', ar: 'عمّان، الأردن' },
-  taxNo: '10999888',
+  taxNo: '',
   footerNote: { en: 'Thank you for choosing Art Space.', ar: 'شكراً لاختياركم مساحة الفن.' },
   terms: {
     en: 'Quotation valid for 14 days.\n50% down payment to start; balance on delivery.\nFinal designs require written client approval before production.\nPrices exclude permits and municipality fees unless stated.',
@@ -136,25 +165,38 @@ export const DEFAULT_COMPANY = {
 
 /* ---------- Website content (editable from Admin → Website Content) ---------- */
 export const CATS = [['signage', 'Signage', 'آرمات'], ['booths', 'Booths', 'بوثات'], ['printing', 'Printing', 'مطبوعات'], ['social', 'Social', 'سوشيال'], ['marketing', 'Strategy', 'استشارات']];
+/**
+ * A showcase item holds the whole story of one job: `image` is the single cover photo
+ * that appears on the card, `images` are the remaining photos of the same place, shown
+ * when the card is opened. Never mix photos of two different places in one item.
+ */
+const project = (id, cat, title, desc) => ({ id, cat, title, desc, image: '', images: [] });
+
 export const DEFAULT_CONTENT = {
   projects: [
-    { id: 'p1', cat: 'signage', title: { en: 'Café Facade — Alucobond + 3D Letters', ar: 'واجهة مقهى — ألكوبوند + حروف بارزة' }, desc: { en: 'Full facade cladding with illuminated 3D acrylic letters.', ar: 'تكسية واجهة كاملة مع حروف أكريليك مضيئة.' }, image: '' },
-    { id: 'p2', cat: 'booths', title: { en: 'Double-Deck Expo Booth', ar: 'بوث معرض بطابقين' }, desc: { en: 'Custom two-level booth with LED video wall and VIP lounge.', ar: 'بوث مخصص بطابقين مع شاشة LED وصالة VIP.' }, image: '' },
-    { id: 'p3', cat: 'printing', title: { en: 'Luxury Business Cards — Foil', ar: 'كروت أعمال فاخرة — فويل' }, desc: { en: 'Textured stock with gold foil and spot UV.', ar: 'ورق مخمل مع فويل ذهبي وسبوت UV.' }, image: '' },
-    { id: 'p4', cat: 'signage', title: { en: 'Dental Clinic — Securit Glass', ar: 'عيادة أسنان — زجاج سيكوريت' }, desc: { en: 'Tempered glass partitions with frosted branding.', ar: 'قواطع سيكوريت مع طباعة فروستد.' }, image: '' },
-    { id: 'p5', cat: 'social', title: { en: 'Social Campaign — Reels & Carousels', ar: 'حملة سوشيال — ريلز وكاروسيل' }, desc: { en: 'Monthly content, motion graphics and paid media.', ar: 'محتوى شهري وموشن جرافيك وإعلانات ممولة.' }, image: '' },
-    { id: 'p6', cat: 'printing', title: { en: 'Corporate Stationery Set', ar: 'طقم قرطاسية مؤسسية' }, desc: { en: 'Letterheads, envelopes, folders and NCR books.', ar: 'ورق رسمي وظروف وفولدرات ودفاتر مكربنة.' }, image: '' },
+    project('p1', 'signage', { en: 'Café Facade — Alucobond + 3D Letters', ar: 'واجهة مقهى — ألكوبوند + حروف بارزة' }, { en: 'Full facade cladding with illuminated 3D acrylic letters.', ar: 'تكسية واجهة كاملة مع حروف أكريليك مضيئة.' }),
+    project('p2', 'booths', { en: 'Double-Deck Expo Booth', ar: 'بوث معرض بطابقين' }, { en: 'Custom two-level booth with LED video wall and VIP lounge.', ar: 'بوث مخصص بطابقين مع شاشة LED وصالة VIP.' }),
+    project('p3', 'printing', { en: 'Luxury Business Cards — Foil', ar: 'كروت أعمال فاخرة — فويل' }, { en: 'Textured stock with gold foil and spot UV.', ar: 'ورق مخمل مع فويل ذهبي وسبوت UV.' }),
+    project('p4', 'signage', { en: 'Dental Clinic — Securit Glass', ar: 'عيادة أسنان — زجاج سيكوريت' }, { en: 'Tempered glass partitions with frosted branding.', ar: 'قواطع سيكوريت مع طباعة فروستد.' }),
+    project('p5', 'social', { en: 'Social Campaign — Reels & Carousels', ar: 'حملة سوشيال — ريلز وكاروسيل' }, { en: 'Monthly content, motion graphics and paid media.', ar: 'محتوى شهري وموشن جرافيك وإعلانات ممولة.' }),
+    project('p6', 'printing', { en: 'Corporate Stationery Set', ar: 'طقم قرطاسية مؤسسية' }, { en: 'Letterheads, envelopes, folders and NCR books.', ar: 'ورق رسمي وظروف وفولدرات ودفاتر مكربنة.' }),
   ],
-  testimonials: [
-    { id: 't1', name: { en: 'Sample Client A', ar: 'عميل تجريبي أ' }, role: { en: 'Owner, Café (sample)', ar: 'مالك مقهى (نموذج)' }, quote: { en: 'They delivered our facade on time and the lit letters look stunning at night.', ar: 'نفذوا الواجهة في الوقت المحدد والحروف المضيئة تبدو رائعة ليلاً.' }, rating: 5 },
-    { id: 't2', name: { en: 'Sample Client B', ar: 'عميل تجريبي ب' }, role: { en: 'Marketing Manager (sample)', ar: 'مدير تسويق (نموذج)' }, quote: { en: 'The instant calculator saved us days of back-and-forth. Clear pricing, great quality.', ar: 'الحاسبة الفورية وفرت علينا أياماً من المراسلات. أسعار واضحة وجودة ممتازة.' }, rating: 5 },
-    { id: 't3', name: { en: 'Sample Client C', ar: 'عميل تجريبي ج' }, role: { en: 'Exhibitor (sample)', ar: 'عارض في معرض (نموذج)' }, quote: { en: 'Our custom booth was the busiest at the expo. Professional team from design to install.', ar: 'بوثنا المخصص كان الأكثر ازدحاماً في المعرض. فريق محترف من التصميم حتى التركيب.' }, rating: 5 },
-  ],
+  testimonials: [], // real client reviews only; the section stays hidden until one is added
   clients: [
     { id: 'k1', name: { en: 'Uncle Osaka', ar: 'أنكل أوساكا' }, logo: '' },
     { id: 'k2', name: { en: 'Tirasimino Cafe', ar: 'تيراسيمينو كافيه' }, logo: '' },
     { id: 'k3', name: { en: 'Al Ameed Coffee', ar: 'قهوة العميد' }, logo: '' },
   ],
+};
+
+/** Every photo of a project, cover first, without duplicates. Older saved data has no `images`. */
+export const galleryOf = (p = {}) => [...new Set([p.image, ...(Array.isArray(p.images) ? p.images : [])].filter(Boolean))];
+
+/** Bring saved website content up to the current shape without touching the owner's words. */
+export const migrateContent = (c = {}) => {
+  const out = { ...DEFAULT_CONTENT, ...c };
+  out.projects = (out.projects || []).map((p) => ({ ...p, images: Array.isArray(p.images) ? p.images : [] }));
+  return out;
 };
 
 /** Fill in fields missing from older saved data without clobbering admin edits. */
@@ -200,14 +242,16 @@ const load = () => {
         themeV: THEME_VERSION,
         dark: stale ? false : s.dark !== false,
         auth: false,
-        leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], customers: [], suppliers: [],
+        me: null,
+        ...blankCollections(),
         rates: migrateRates(s.rates),
-        content: { ...DEFAULT_CONTENT, ...(s.content || {}) },
+        content: migrateContent(s.content),
         company: { ...DEFAULT_COMPANY, ...(s.company || {}) },
+        hr: migrateHR(s.hr),
       };
     }
   } catch {}
-  return { lang: 'ar', dark: false, themeV: THEME_VERSION, mode: 'site', auth: false, rates: DEFAULT_RATES, content: DEFAULT_CONTENT, company: DEFAULT_COMPANY, cart: [], leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], customers: [], suppliers: [] };
+  return { lang: 'ar', dark: false, themeV: THEME_VERSION, mode: 'site', auth: false, rates: DEFAULT_RATES, content: DEFAULT_CONTENT, company: DEFAULT_COMPANY, hr: DEFAULT_HR, cart: [], ...blankCollections() };
 };
 
 const Ctx = createContext();
@@ -220,7 +264,8 @@ export function Provider({ children }) {
   const dirty = useRef(new Set());
   useEffect(() => {
     // Private business data lives on the server only — never persist it in the visitor's browser.
-    const { leads, quotes, orders, invoices, surveys, purchases, cash, customers, suppliers, auth, ...pub } = s;
+    const { auth, me, ...pub } = s;
+    COLLECTIONS.forEach((k) => { delete pub[k]; });
     localStorage.setItem(KEY, JSON.stringify(pub));
     document.documentElement.dir = s.lang === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = s.lang;
@@ -229,9 +274,34 @@ export function Provider({ children }) {
 
   // Server responses land here: they must not be marked dirty or every pull would echo back.
   const applyServer = useCallback((p) => setS((o) => ({ ...o, ...p })), []);
+  const lastDenied = useRef(0);
   const upd = useCallback((p) => setS((o) => {
     const next = { ...o, ...(typeof p === 'function' ? p(o) : p) };
-    SYNCABLE.forEach((k) => { if (next[k] !== o[k]) dirty.current.add(k); });
+    const denied = [];
+    SYNCABLE.forEach((k) => {
+      if (next[k] === o[k]) return;
+      // Signed-in staff: refuse edits their role does not allow (the server enforces the same rules).
+      if (o.auth && o.me && !o.me.full) {
+        const mods = SETTINGS_KEYS.includes(k) ? SETTING_MODULES[k] : COL_MODULES[k];
+        const oldRows = Array.isArray(o[k]) ? o[k] : null;
+        const newRows = Array.isArray(next[k]) ? next[k] : null;
+        let need = ['edit'];
+        if (oldRows && newRows) {
+          const oldIds = new Map(oldRows.map((r) => [r.id, r]));
+          const newIds = new Map(newRows.map((r) => [r.id, r]));
+          need = [];
+          if (newRows.some((r) => !oldIds.has(r.id))) need.push('add');
+          if (oldRows.some((r) => !newIds.has(r.id))) need.push('delete');
+          if (newRows.some((r) => oldIds.has(r.id) && oldIds.get(r.id) !== r)) need.push('edit');
+        }
+        if (mods && need.some((a) => !canAny(o.me, mods, a))) { next[k] = o[k]; denied.push(k); return; }
+      }
+      dirty.current.add(k);
+    });
+    if (denied.length && Date.now() - lastDenied.current > 1500) {
+      lastDenied.current = Date.now();
+      setTimeout(() => window.alert(o.lang === 'ar' ? 'ليس لديك صلاحية لهذا الإجراء. تواصل مع مدير النظام.' : 'You do not have permission to do that. Please ask a full-access administrator.'), 0);
+    }
     return next;
   }), []);
 
@@ -244,22 +314,29 @@ export function Provider({ children }) {
         if (row.id === 'rates') next.rates = migrateRates(row.data);
         if (row.id === 'content') next.content = { ...DEFAULT_CONTENT, ...row.data };
         if (row.id === 'company') next.company = { ...DEFAULT_COMPANY, ...row.data };
+        if (row.id === 'hr') next.hr = migrateHR(row.data);
       });
       if (Object.keys(next).length) applyServer(next);
       if (!authed) { synced.current = false; dirty.current.clear(); return; }
       const out = {};
       for (const t of COLLECTIONS) {
         const { data, error } = await sb.from(t).select('data');
-        if (error) { if (error.status === 401) { await sb.auth.signOut(); } return; }
-        out[t] = (data || []).map((r) => r.data).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        if (error) {
+          if (error.status === 401) { await sb.auth.signOut(); return; }
+          if (error.status === 403) { out[t] = []; continue; } // this role has no access to the section
+          return;
+        }
+        const when = (r) => String(r.date || r.month || r.startDate || '');
+        const rows = (data || []).map((r) => r.data).sort((a, b) => when(b).localeCompare(when(a)));
+        out[t] = rows;
       }
       applyServer(out);
       dirty.current.clear();
       synced.current = true;
     };
-    sb.auth.getSession().then(({ data }) => { applyServer({ auth: !!data.session }); pull(!!data.session); });
+    sb.auth.getSession().then(({ data }) => { applyServer({ auth: !!data.session, me: data.session?.user || null }); pull(!!data.session); });
     const { data: sub } = sb.auth.onAuthStateChange((_e, sess) => {
-      applyServer(sess ? { auth: true } : { auth: false, leads: [], quotes: [], orders: [], invoices: [], surveys: [], purchases: [], cash: [], customers: [], suppliers: [] });
+      applyServer(sess ? { auth: true, me: sess.user || null } : { auth: false, me: null, ...blankCollections() });
       pull(!!sess);
     });
     return () => sub.subscription.unsubscribe();
@@ -269,13 +346,13 @@ export function Provider({ children }) {
   useEffect(() => {
     if (!s.auth) return undefined;
     const id = setInterval(async () => {
-      for (const t of ['leads', 'quotes', 'orders', 'surveys', 'purchases', 'cash', 'customers', 'suppliers']) {
+      for (const t of ['leads', 'quotes', 'orders', 'surveys', 'purchases', 'cash', 'customers', 'suppliers', 'projects', 'inventory', 'stock_movements']) {
         const { data } = await sb.from(t).select('data');
         if (!data) continue;
         setS((o) => {
-          const have = new Set(o[t].map((r) => r.id));
+          const have = new Set((o[t] || []).map((r) => r.id));
           const fresh = data.map((r) => r.data).filter((r) => !have.has(r.id));
-          return fresh.length ? { ...o, [t]: [...fresh, ...o[t]] } : o;
+          return fresh.length ? { ...o, [t]: [...fresh, ...(o[t] || [])] } : o;
         });
       }
     }, 30000);
@@ -288,19 +365,24 @@ export function Provider({ children }) {
     const keys = [...dirty.current];
     const t = setTimeout(async () => {
       const saved = [];
+      let reload = '';
       try {
         for (const k of keys) {
           const res = SETTINGS_KEYS.includes(k)
             ? await sb.from('settings').upsert({ id: k, data: s[k] })
-            : await sb.from(k).upsert(s[k].map((r) => ({ id: r.id, data: r })));
+            : await sb.from(k).upsert((s[k] || []).map((r) => ({ id: r.id, data: r })));
           if (res?.error) throw res.error;
+          if (res?.data?.pending) reload = s.lang === 'ar' ? 'أُرسل طلب الحذف إلى مدير بصلاحية كاملة للموافقة عليه. سيبقى السجل إلى حين الموافقة.' : 'Your delete request was sent to a full-access administrator for approval. The record stays until it is approved.';
           saved.push(k);
         }
       } catch (e) {
         console.error('save failed:', e);
+        if (e?.status === 403) reload = e.message || 'Not allowed.';
       } finally {
         // Keep anything that failed queued for the next edit instead of silently dropping it.
         saved.forEach((k) => dirty.current.delete(k));
+        // Rejected or held-for-approval changes: tell the user, then reload so the screen matches the server.
+        if (reload) { dirty.current.clear(); window.alert(reload); window.location.reload(); }
       }
     }, 800);
     return () => clearTimeout(t);
@@ -335,23 +417,204 @@ export function Provider({ children }) {
     upd((o) => ({ leads: [full, ...o.leads] }));
   };
 
-  /** Approved quote → Order + Invoice */
+  /** Approved quote → Project + Order + Invoice */
   const convertQuote = (qid) => upd((o) => {
     const q = o.quotes.find((x) => x.id === qid);
     if (!q || q.converted) return {};
     const t = totals(q, o.rates.vat);
-    const existing = o.orders.find((x) => x.quoteId === qid);
-    const oid = existing?.id || uid('o');
-    const orders = existing
+    const existingOrder = o.orders.find((x) => x.quoteId === qid);
+    const oid = existingOrder?.id || uid('o');
+    const orders = existingOrder
       ? o.orders.map((x) => (x.id === oid ? { ...x, stage: 'brief', total: t.total } : x))
       : [{ id: oid, quoteId: qid, clientId: q.clientId, customerId: q.customerId || '', title: q.no, stage: 'brief', date: q.date, total: t.total }, ...o.orders];
-    const inv = { id: uid('inv'), no: `INV-2026-${String(o.invoices.length + 1).padStart(3, '0')}`, orderId: oid, clientId: q.clientId, customerId: q.customerId || '', date: new Date().toISOString().slice(0, 10), vat: q.vat, vatRate: o.rates.vat, discount: q.discount, items: q.items, payments: [] };
+    
+    // Create or link Project
+    const existingProject = (o.projects || []).find((p) => p.quoteId === qid || p.orderId === oid);
+    const pid = existingProject?.id || uid('prj');
+    const clientLead = o.leads.find((l) => l.id === q.clientId);
+    const clientCust = o.customers.find((c) => c.id === q.customerId);
+    const clientName = clientCust?.name?.en || clientLead?.company || clientLead?.name || q.no;
+    
+    const prjNumber = existingProject?.no || `PRJ-2026-${String((o.projects || []).length + 1).padStart(3, '0')}`;
+    const project = existingProject || {
+      id: pid,
+      no: prjNumber,
+      title: `${clientName} — ${q.items[0]?.label?.en || 'Signage & Advertising Job'}`,
+      clientId: q.clientId,
+      customerId: q.customerId || '',
+      quoteId: qid,
+      orderId: oid,
+      status: 'planning',
+      startDate: q.date || new Date().toISOString().slice(0, 10),
+      targetDate: '',
+      manager: 'Alaa Al-Yaman',
+      location: 'Amman, Jordan',
+      budgetRevenue: Math.round(t.sub * 100) / 100,
+      budgetCost: Math.round(t.sub * 0.55 * 100) / 100,
+      targetMargin: 45,
+      milestones: [
+        { id: uid('m'), title: 'Design Approval & Site Measurements', done: true, dueDate: '' },
+        { id: uid('m'), title: 'Material Requisition & Cutting', done: false, dueDate: '' },
+        { id: uid('m'), title: 'Fabrication & Assembly', done: false, dueDate: '' },
+        { id: uid('m'), title: 'On-site Installation & Electrical', done: false, dueDate: '' },
+        { id: uid('m'), title: 'Client Inspection & Handover', done: false, dueDate: '' },
+      ],
+      notes: q.notes || '',
+      files: q.filePath ? [{ name: q.file, path: q.filePath }] : [],
+    };
+    const projects = existingProject ? o.projects : [project, ...(o.projects || [])];
+
+    const inv = { id: uid('inv'), no: `INV-2026-${String(o.invoices.length + 1).padStart(3, '0')}`, orderId: oid, projectId: pid, clientId: q.clientId, customerId: q.customerId || '', date: new Date().toISOString().slice(0, 10), vat: q.vat, vatRate: o.rates.vat, discount: q.discount, items: q.items, payments: [] };
     return {
-      orders, invoices: [inv, ...o.invoices],
+      orders,
+      projects,
+      invoices: [inv, ...o.invoices],
       quotes: o.quotes.map((x) => (x.id === qid ? { ...x, converted: true } : x)),
       leads: o.leads.map((l) => (l.id === q.clientId ? { ...l, stage: 'won' } : l)),
     };
   });
 
-  return <Ctx.Provider value={{ ...s, upd, T, tx, money, submitQuote, sendForm, addLead, addLeadLocal, convertQuote, resetAll }}>{children}</Ctx.Provider>;
+  const addProject = (projectData) => {
+    const pid = uid('prj');
+    const no = `PRJ-2026-${String((s.projects || []).length + 1).padStart(3, '0')}`;
+    const newPrj = {
+      id: pid,
+      no,
+      title: projectData.title || 'Untitled Project',
+      clientId: projectData.clientId || '',
+      customerId: projectData.customerId || '',
+      quoteId: projectData.quoteId || '',
+      orderId: projectData.orderId || '',
+      status: projectData.status || 'planning',
+      startDate: projectData.startDate || new Date().toISOString().slice(0, 10),
+      targetDate: projectData.targetDate || '',
+      manager: projectData.manager || 'Alaa Al-Yaman',
+      location: projectData.location || 'Amman, Jordan',
+      budgetRevenue: Number(projectData.budgetRevenue || 0),
+      budgetCost: Number(projectData.budgetCost || 0),
+      targetMargin: Number(projectData.targetMargin || 45),
+      milestones: projectData.milestones || [
+        { id: uid('m'), title: 'Brief & Measurement', done: false, dueDate: '' },
+        { id: uid('m'), title: 'Design Approval', done: false, dueDate: '' },
+        { id: uid('m'), title: 'Production / Workshop', done: false, dueDate: '' },
+        { id: uid('m'), title: 'Installation & Handover', done: false, dueDate: '' },
+      ],
+      notes: projectData.notes || '',
+      files: projectData.files || [],
+    };
+    upd((o) => ({ projects: [newPrj, ...(o.projects || [])] }));
+    return newPrj;
+  };
+
+  const updateProject = (pid, patch) => {
+    upd((o) => ({
+      projects: (o.projects || []).map((p) => (p.id === pid ? { ...p, ...patch } : p)),
+    }));
+  };
+
+  const deleteProject = (pid) => {
+    upd((o) => ({
+      projects: (o.projects || []).filter((p) => p.id !== pid),
+    }));
+  };
+
+  const addInventoryItem = (item) => {
+    const id = uid('inv_item');
+    const newItem = {
+      id,
+      sku: item.sku || `SKU-${Date.now().toString().slice(-6)}`,
+      name: item.name || { en: 'New Item', ar: 'مادة جديدة' },
+      category: item.category || 'sheets',
+      unit: item.unit || 'sheet',
+      minStock: Number(item.minStock || 0),
+      currentQty: Number(item.currentQty || 0),
+      unitCost: Number(item.unitCost || 0),
+      sellingPrice: Number(item.sellingPrice || 0),
+      location: item.location || '',
+      supplierId: item.supplierId || '',
+    };
+    upd((o) => ({ inventory: [newItem, ...(o.inventory || [])] }));
+    return newItem;
+  };
+
+  const updateInventoryItem = (id, patch) => {
+    upd((o) => ({
+      inventory: (o.inventory || []).map((i) => (i.id === id ? { ...i, ...patch } : i)),
+    }));
+  };
+
+  const deleteInventoryItem = (id) => {
+    upd((o) => ({
+      inventory: (o.inventory || []).filter((i) => i.id !== id),
+    }));
+  };
+
+  const recordStockMovement = (mov) => {
+    const mid = uid('stk');
+    const movement = {
+      id: mid,
+      itemId: mov.itemId,
+      type: mov.type || 'consumption', // 'inbound' | 'consumption' | 'adjustment' | 'return'
+      qty: Number(mov.qty || 0),
+      unitCost: Number(mov.unitCost || 0),
+      totalCost: Number(mov.qty || 0) * Number(mov.unitCost || 0),
+      date: mov.date || new Date().toISOString().slice(0, 10),
+      projectId: mov.projectId || '',
+      purchaseId: mov.purchaseId || '',
+      note: mov.note || '',
+      createdBy: mov.createdBy || 'Staff',
+    };
+
+    upd((o) => {
+      const targetItem = (o.inventory || []).find((i) => i.id === mov.itemId);
+      if (!targetItem) return { stock_movements: [movement, ...(o.stock_movements || [])] };
+
+      let newQty = targetItem.currentQty;
+      if (movement.type === 'inbound' || movement.type === 'return') {
+        newQty += movement.qty;
+      } else if (movement.type === 'consumption') {
+        newQty = Math.max(0, newQty - movement.qty);
+      } else if (movement.type === 'adjustment') {
+        newQty = movement.qty;
+      }
+
+      const updatedInventory = (o.inventory || []).map((i) =>
+        i.id === mov.itemId ? { ...i, currentQty: newQty } : i
+      );
+
+      return {
+        inventory: updatedInventory,
+        stock_movements: [movement, ...(o.stock_movements || [])],
+      };
+    });
+    return movement;
+  };
+
+  return (
+    <Ctx.Provider
+      value={{
+        ...s,
+        canDo: (mod, act) => (mod === 'dash' ? act === 'view' : can(s.me, mod, act)),
+        upd,
+        T,
+        tx,
+        money,
+        submitQuote,
+        sendForm,
+        addLead,
+        addLeadLocal,
+        convertQuote,
+        addProject,
+        updateProject,
+        deleteProject,
+        addInventoryItem,
+        updateInventoryItem,
+        deleteInventoryItem,
+        recordStockMovement,
+        resetAll,
+      }}
+    >
+      {children}
+    </Ctx.Provider>
+  );
 }

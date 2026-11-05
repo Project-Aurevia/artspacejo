@@ -78,10 +78,10 @@ export function EntityModal({ kind = 'customer', draft, onClose, onSaved }) {
   return (
     <Modal wide title={`${isNew ? T('New', 'جديد') : T('Edit', 'تحرير')} · ${T(meta.en, meta.ar)}`} onClose={onClose}>
       <form onSubmit={save} className="space-y-4">
-        <div className="flex gap-1 p-1 rounded-xl bg-black/5 dark:bg-white/5 w-fit">
+        <div className="seg w-fit">
           {[['details', T('Details', 'البيانات')], ['contact', T('Contact', 'جهة الاتصال')]].map(([k, l]) => (
-            <button key={k} type="button" onClick={() => setTab(k)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${tab === k ? 'bg-gold text-ink shadow-sm' : 'opacity-70 hover:opacity-100'}`}>
+            <button key={k} type="button" onClick={() => setTab(k)} data-active={tab === k} aria-pressed={tab === k}
+              className="seg-tab px-3.5 py-1.5 text-xs font-semibold">
               {l}
             </button>
           ))}
@@ -129,7 +129,7 @@ export function EntityModal({ kind = 'customer', draft, onClose, onSaved }) {
                     {' — '}{d.by === 'phone' ? T('same phone', 'نفس الهاتف') : T('same e-mail', 'نفس البريد')}
                     {' '}<span dir="ltr">{d.value}</span>
                   </span>
-                  <span className="badge bg-black/10 dark:bg-white/10 text-[10px] ms-1.5 align-middle">
+                  <span className="badge ms-1.5 align-middle bg-surface-3 text-[10px] text-muted">
                     {T(DIR_KINDS[d.kind].en, DIR_KINDS[d.kind].ar)}
                   </span>
                 </li>
@@ -238,7 +238,7 @@ export function EntityPicker({ kind = 'customer', value = '', onPick, label, nam
                   <div className="text-sm font-semibold truncate">{l.company || l.name}</div>
                   <div className="text-[11px] opacity-55 truncate">{[l.company ? l.name : '', l.phone, l.email].filter(Boolean).join(' · ')}</div>
                 </div>
-                <span className="badge bg-black/10 dark:bg-white/10 text-[10px] shrink-0">{T('CRM', 'العملاء')}</span>
+                <span className="badge shrink-0 bg-surface-3 text-[10px] text-muted">{T('CRM', 'العملاء')}</span>
               </button>
             ))}
 
@@ -330,7 +330,7 @@ export default function Directory() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
         <div className="glass stat-card p-5">
           <div className="flex items-center gap-2"><Icon size={14} className="shrink-0 text-gold" /><span className="stat-label truncate">{T(meta.pluralEn, meta.pluralAr)}</span></div>
           <div className="stat-value mt-2.5 text-[26px] text-gold">{list.length}</div>
@@ -341,7 +341,7 @@ export default function Directory() {
           <div className="stat-value mt-2.5 text-[26px] text-emerald-500">{withContact}</div>
           <div className="mt-1.5 text-[11px] leading-snug text-subtle">{T('Ready for documents', 'جاهزة للمستندات')}</div>
         </div>
-        <div className="glass stat-card p-5">
+        <div className="glass stat-card col-span-2 p-5 sm:col-span-1">
           <div className="flex items-center gap-2"><AlertTriangle size={14} className={`shrink-0 ${clashes.size ? 'text-amber-500' : 'text-emerald-500'}`} /><span className="stat-label truncate">{T('Possible duplicates', 'تكرارات محتملة')}</span></div>
           <div className={`stat-value mt-2.5 text-[26px] ${clashes.size ? 'text-amber-500' : 'text-emerald-500'}`}>{clashes.size}</div>
           <div className="mt-1.5 text-[11px] leading-snug text-subtle">{T('Shared phone or e-mail', 'هاتف أو بريد مشترك')}</div>

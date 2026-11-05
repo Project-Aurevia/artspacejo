@@ -19,7 +19,7 @@ async function call(path, { method = 'GET', body, raw, headers = {} } = {}) {
   }
 }
 
-const SETTINGS = ['rates', 'content', 'company'];
+const SETTINGS = ['rates', 'content', 'company', 'hr'];
 // ids the admin has seen per collection — only these may be deleted by a save,
 // so website submissions that arrive meanwhile are never wiped.
 const known = {};
@@ -48,6 +48,23 @@ const table = (t) => {
   };
 };
 
+export const usersApi = {
+  list: () => call('/users'),
+  create: (body) => call('/users', { method: 'POST', body }),
+  update: (id, body) => call(`/users/${encodeURIComponent(id)}`, { method: 'PUT', body }),
+  remove: (id) => call(`/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  approvals: () => call('/approvals'),
+  decide: (id, approve) => call(`/approvals/${encodeURIComponent(id)}/${approve ? 'approve' : 'reject'}`, { method: 'POST', body: {} }),
+};
+
+export const mailApi = {
+  get: () => call('/mail/config'),
+  save: (body) => call('/mail/config', { method: 'PUT', body }),
+  test: (to) => call('/mail/test', { method: 'POST', body: { to } }),
+  start: () => call('/mail/ms/start', { method: 'POST', body: {} }),
+  disconnect: () => call('/mail/ms/disconnect', { method: 'POST', body: {} }),
+};
+
 /** Public server capabilities — used to decide between SMTP delivery and the mailto fallback. */
 export async function serverHealth() {
   const { data, error } = await call('/health');
@@ -61,14 +78,14 @@ export const sb = {
       const { data, error } = await call('/login', { method: 'POST', body: { email, password } });
       if (error) return { error };
       localStorage.setItem(TOKEN, data.token);
-      emit({ token: data.token });
+      emit({ token: data.token, user: data.user });
       return { error: null };
     },
     async getSession() {
       if (!getToken()) return { data: { session: null } };
-      const { error } = await call('/session');
+      const { data, error } = await call('/session');
       if (error && error.status === 401) { localStorage.removeItem(TOKEN); return { data: { session: null } }; }
-      return { data: { session: { token: getToken() } } };
+      return { data: { session: { token: getToken(), user: data?.user || null } } };
     },
     async signOut() { localStorage.removeItem(TOKEN); emit(null); },
     onAuthStateChange(cb) {

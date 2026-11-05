@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, ArrowUp, ArrowDown, ImagePlus, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, ImagePlus, Search, ChevronDown, ChevronUp, Star } from 'lucide-react';
 import { useApp, uid, CATS } from './store.jsx';
 import { uploadMedia } from './api.js';
 
@@ -37,6 +37,64 @@ export function ImgPick({ value, on, fit = 'cover', label }) {
         <label className="btn-ghost text-xs cursor-pointer">{busy ? '…' : label}<input type="file" accept="image/*" className="hidden" onChange={pick} /></label>
         {value && <button type="button" className="text-xs text-red-400 block" onClick={() => on('')}>{T('Remove image', 'إزالة الصورة')}</button>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The rest of a project's photos. The cover lives in the card above (`image`);
+ * everything here belongs to the same place and is shown in this order when a
+ * visitor opens that project — so add one project per job, never a mixed set.
+ */
+export function Gallery({ images = [], on, onCover }) {
+  const { T } = useApp();
+  const [busy, setBusy] = useState(false);
+  const add = async (e) => {
+    const files = [...(e.target.files || [])];
+    e.target.value = '';
+    if (!files.length) return;
+    setBusy(true);
+    const out = [];
+    for (const f of files) {
+      try { out.push(await uploadMedia(f)); } catch { /* one unreadable file must not lose the rest */ }
+    }
+    setBusy(false);
+    if (out.length) on([...images, ...out]);
+    if (out.length < files.length) alert(T('Some files could not be read.', 'تعذرت قراءة بعض الملفات.'));
+  };
+  const btn = 'text-white/80 disabled:opacity-25';
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="label !mb-0">
+          {T('Photos of this project', 'صور هذا المشروع')} <span className="tabular-nums opacity-50">({images.length})</span>
+        </label>
+        <label className="btn-ghost cursor-pointer text-xs">
+          {busy ? '…' : T('Add photos', 'إضافة صور')}
+          <input type="file" accept="image/*" multiple className="hidden" onChange={add} />
+        </label>
+      </div>
+      {images.length > 0 ? (
+        <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8">
+          {images.map((src, i) => (
+            <div key={src} className="group relative aspect-square overflow-hidden rounded-lg border border-line/10 bg-surface-2">
+              <img src={src} alt="" className="h-full w-full object-cover" />
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/65 p-1 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
+                {onCover && (
+                  <button type="button" onClick={() => { onCover(src); on(images.filter((_, k) => k !== i)); }} className="text-gold" title={T('Use as cover', 'اجعلها الغلاف')} aria-label={T('Use as cover', 'اجعلها الغلاف')}><Star size={12} /></button>
+                )}
+                <button type="button" disabled={i === 0} onClick={() => on(move(images, i, -1))} className={btn} aria-label={T('Move earlier', 'تقديم')}><ArrowUp size={12} /></button>
+                <button type="button" disabled={i === images.length - 1} onClick={() => on(move(images, i, 1))} className={btn} aria-label={T('Move later', 'تأخير')}><ArrowDown size={12} /></button>
+                <button type="button" onClick={() => on(images.filter((_, k) => k !== i))} className="text-red-300" aria-label={T('Delete photo', 'حذف الصورة')}><Trash2 size={12} /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-1 text-[11px] leading-relaxed text-subtle">
+          {T('Add the rest of the photos of this same place. Visitors see them when they open the card.', 'أضف بقية صور نفس المكان. تظهر للزائر عند فتح البطاقة.')}
+        </p>
+      )}
     </div>
   );
 }
@@ -161,7 +219,7 @@ export function CatalogEditor({ g, unit, q = '', onAdd }) {
                   {g === 'addons' && (
                     <label className="hidden sm:flex items-center gap-1 shrink-0 text-[10px] cursor-pointer"
                       title={T('Ticked by default on the website calculator', 'محدد افتراضياً في حاسبة الموقع')}>
-                      <input type="checkbox" className="accent-[#C9A45C]" checked={!!m.on} onChange={(e) => patch(k, { on: e.target.checked })} />
+                      <input type="checkbox" className="h-4 w-4 shrink-0 accent-gold" checked={!!m.on} onChange={(e) => patch(k, { on: e.target.checked })} />
                       <span className="text-[11px] text-subtle">{T('default', 'افتراضي')}</span>
                     </label>
                   )}
@@ -192,7 +250,7 @@ export function CatalogEditor({ g, unit, q = '', onAdd }) {
                     </p>}
                     {g === 'print' && <div className="flex-1 min-w-[200px]"><label className="label">{T('Available sizes (comma separated)', 'المقاسات المتاحة (مفصولة بفاصلة)')}</label>
                       <BlurText v={(m.sizes || []).join(', ')} dir="ltr" onCommit={(t) => patch(k, { sizes: t.split(',').map((s) => s.trim()).filter(Boolean) })} /></div>}
-                    {g === 'packages' && <label className="flex items-center gap-2 text-sm pb-2"><input type="checkbox" className="accent-[#C9A45C]" checked={!!m.popular} onChange={(e) => patch(k, { popular: e.target.checked })} />{T('Mark as "Most Popular"', 'علامة "الأكثر طلباً"')}</label>}
+                    {g === 'packages' && <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm text-muted"><input type="checkbox" className="h-4 w-4 shrink-0 accent-gold" checked={!!m.popular} onChange={(e) => patch(k, { popular: e.target.checked })} />{T('Mark as "Most Popular"', 'علامة "الأكثر طلباً"')}</label>}
                     <div className="flex gap-1 ms-auto">
                       <button type="button" disabled={i === 0} onClick={() => mv(k, -1)} className="btn-ghost !p-2 disabled:opacity-30" title={T('Move up', 'أعلى')}><ArrowUp size={14} /></button>
                       <button type="button" disabled={i === entries.length - 1} onClick={() => mv(k, 1)} className="btn-ghost !p-2 disabled:opacity-30" title={T('Move down', 'أسفل')}><ArrowDown size={14} /></button>
@@ -243,7 +301,7 @@ export function ContentManager() {
   const catName = (k) => { const c = CATS.find((x) => x[0] === k); return c ? (lang === 'ar' ? c[2] : c[1]) : k; };
   const allOpen = list.length > 0 && list.every((x) => open.has(x.id));
   const NEW = {
-    projects: { cat: 'signage', title: { en: 'New project', ar: 'مشروع جديد' }, desc: { en: '', ar: '' }, image: '' },
+    projects: { cat: 'signage', title: { en: 'New project', ar: 'مشروع جديد' }, desc: { en: '', ar: '' }, image: '', images: [] },
     testimonials: { name: { en: 'Client name', ar: 'اسم العميل' }, role: { en: 'Title, Company', ar: 'المسمى، الشركة' }, quote: { en: '', ar: '' }, rating: 5 },
     clients: { name: { en: 'New client', ar: 'عميل جديد' }, logo: '' },
   };
@@ -295,13 +353,13 @@ export function ContentManager() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{txt(p.title) || T('Untitled', 'بدون عنوان')}</div>
-                  <div className="mt-1 flex items-center gap-2"><span className="badge bg-gold/15 text-gold">{catName(p.cat)}</span><span className="text-[10px] tabular-nums text-subtle">#{i + 1}</span>{!p.image && <span className="text-[10px] text-terra">{T('no photo', 'بدون صورة')}</span>}</div>
+                  <div className="mt-1 flex items-center gap-2"><span className="badge bg-gold/15 text-gold">{catName(p.cat)}</span><span className="text-[10px] tabular-nums text-subtle">#{i + 1}</span>{(p.images || []).length > 0 && <span className="text-[10px] tabular-nums text-subtle">+{(p.images || []).length} {T('photos', 'صورة')}</span>}{!p.image && <span className="text-[10px] text-terra">{T('no cover', 'بدون غلاف')}</span>}</div>
                 </div>
                 <button type="button" onClick={() => toggle(p.id)} className="btn-ghost !p-2 shrink-0" title={isOpen ? T('Collapse', 'طي') : T('Edit', 'تحرير')}>{isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</button>
               </div>
               {isOpen && <div className="px-3 pb-3 pt-3 border-t border-line/10 space-y-3">
                 <div className="flex gap-4 flex-wrap md:flex-nowrap items-start">
-                  <ImgPick value={p.image} on={(image) => edit('projects', p.id, { image })} label={T('Upload photo', 'رفع صورة')} />
+                  <ImgPick value={p.image} on={(image) => edit('projects', p.id, { image })} label={T('Cover photo', 'صورة الغلاف')} />
                   <div className="flex-1 min-w-[240px] space-y-3">
                     <div><label className="label">{T('Category', 'الفئة')}</label>
                       <select className="input" value={p.cat} onChange={(e) => edit('projects', p.id, { cat: e.target.value })}>{CATS.map(([k, en, ar]) => <option key={k} value={k}>{lang === 'ar' ? ar : en}</option>)}</select></div>
@@ -309,6 +367,11 @@ export function ContentManager() {
                     <Pair area label={T('Description', 'الوصف')} v={p.desc} on={(desc) => edit('projects', p.id, { desc })} />
                   </div>
                 </div>
+                <Gallery
+                  images={p.images || []}
+                  on={(images) => edit('projects', p.id, { images })}
+                  onCover={(image) => edit('projects', p.id, { image })}
+                />
                 <div className="flex items-center gap-2 flex-wrap">
                   <Ctl i={i} n={all.length} up={() => mv('projects', i, -1)} down={() => mv('projects', i, 1)} del={() => del('projects', p.id)} />
                   <button type="button" className="btn-gold !py-1.5 !px-3 text-[11px] ms-auto" onClick={() => toggle(p.id)}>{T('Done', 'تم')}</button>

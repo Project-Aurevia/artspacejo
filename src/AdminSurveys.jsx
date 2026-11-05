@@ -73,7 +73,7 @@ export default function Surveys() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
         <Kpi icon={ClipboardList} label={T('Survey requests', 'طلبات المعاينة')} value={String(surveys.length)} hint={T('From the website form', 'من نموذج الموقع')} />
         <Kpi icon={Clock} label={T('Awaiting scheduling', 'بانتظار الجدولة')} value={String(countOf('new'))} hint={T('New requests to call back', 'طلبات جديدة للتواصل')} tone={countOf('new') ? 'terra' : 'emerald'} />
         <Kpi icon={Calendar} label={T('Scheduled', 'مجدولة')} value={String(countOf('scheduled'))} hint={nextVisit ? `${T('Next visit', 'أقرب موعد')}: ${nextVisit}` : T('Nothing booked', 'لا مواعيد')} tone="sky" />

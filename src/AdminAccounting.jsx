@@ -19,7 +19,7 @@ const BADGE = {
   open: 'bg-sky-500/15 text-sky-400',
   overdue: 'bg-red-500/15 text-red-400',
   sent: 'bg-gold/20 text-gold',
-  draft: 'bg-zinc-500/20 text-zinc-400',
+  draft: 'bg-zinc-500/15 text-muted',
   approved: 'bg-emerald-500/15 text-emerald-500',
   rejected: 'bg-red-500/15 text-red-400',
 };
@@ -37,7 +37,7 @@ function Tip({ icon: Icon, label, value, hint, tone = 'gold' }) {
 
 function Panel({ title, sub, action, children, className = '' }) {
   return (
-    <section className={`glass p-5 ${className}`}>
+    <section className={`glass p-4 ${className} sm:p-5`}>
       <div className="panel-head mb-3 flex items-start gap-3 pb-3">
         <div className="min-w-0">
           <h3 className="text-[13px] font-bold leading-tight tracking-tight">{title}</h3>
@@ -110,7 +110,7 @@ function Overview({ s, onTab, onNav }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
         <Tip icon={Receipt} label={T('Invoiced', 'المفوتر')} value={money(s.salesGross)} hint={`${s.invoiceCount} ${T('invoices', 'فاتورة')} · ${T('VAT included', 'شامل الضريبة')}`} />
         <Tip icon={Wallet} label={T('Collected', 'المحصّل')} value={money(s.collected)} hint={`${collected.toFixed(0)}% ${T('of invoiced', 'من المفوتر')}`} tone="emerald" />
         <Tip icon={AlertTriangle} label={T('Receivables', 'ذمم العملاء')} value={money(s.receivables)} hint={s.receivablesOverdue > 0 ? `${money(s.receivablesOverdue)} ${T('late on', 'متأخر على')} ${s.lateInvoiceCount}` : T('Nothing late', 'لا يوجد متأخر')} tone="terra" />
@@ -122,28 +122,55 @@ function Overview({ s, onTab, onNav }) {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Panel title={T('Profit & loss', 'الأرباح والخسائر')} sub={T('Excludes VAT — VAT is collected for the tax office, not earned.', 'بدون الضريبة — الضريبة تُحصّل لصالح دائرة الضريبة وليست إيراداً.')}>
-          <Line label={T('Sales (net of VAT)', 'المبيعات بدون ضريبة')} value={money(s.salesNet)} />
-          <Line label={T('Purchases (net of VAT)', 'المشتريات بدون ضريبة')} value={`− ${money(s.purchasesNet)}`} tone="text-terra" />
-          <Line label={T('Gross profit', 'الربح الإجمالي')} value={money(s.grossProfit)} strong />
+        <Panel title={T('Comprehensive Income Statement (P&L)', 'قائمة الدخل والأرباح الشاملة')} sub={T('Net of VAT · Gross Margin vs True Operating Overheads & Payroll', 'بدون الضريبة · هامش العمليات مقابل المصاريف التشغيلية ورواتب الفريق')}>
+          <Line label={T('Sales Revenue (Net of VAT)', 'إجمالي المبيعات بدون ضريبة')} value={money(s.salesNet)} />
+          <Line label={T('Direct Purchases & Materials (COGS)', 'تكاليف المشتريات والمواد المباشرة')} value={`− ${money(s.purchasesNet)}`} tone="text-terra" />
+          <Line label={T('Gross Operating Profit', 'الربح الإجمالي للعمليات')} value={money(s.grossProfit)} strong tone="text-fg" />
           <div className="my-1.5 h-px bg-line/10" />
-          <Line label={T('Petty cash expenses', 'مصروفات نقد المصروف')} value={`− ${money(s.petty)}`} tone="text-terra" />
-          <Line label={T('Net profit', 'صافي الربح')} value={money(s.netProfit)} strong tone={s.netProfit >= 0 ? 'text-emerald-500' : 'text-red-400'} />
+          <Line label={T('Salaries & Social Security (Payroll)', 'رواتب الفريق وحصة الضمان')} value={`− ${money(s.payrollCost || 0)}`} tone="text-terra" />
+          <Line label={T('Petty Cash & Site Overheads', 'نقد المصروف والمصاريف الإدارية')} value={`− ${money(s.petty)}`} tone="text-terra" />
+          <div className="my-1.5 h-px bg-line/10" />
+          <Line label={T('Net Operating Income (EBIT)', 'صافي الربح التشغيلي الحقيقي')} value={money(s.netProfit)} strong tone={s.netProfit >= 0 ? 'text-emerald-500' : 'text-red-400'} />
           <div className="mt-3"><Bar pct={s.margin} className={s.netProfit >= 0 ? 'bg-emerald-500' : 'bg-red-500'} /></div>
         </Panel>
 
         <Panel
-          title={T('VAT position', 'موقف ضريبة القيمة المضافة')}
+          title={T('VAT Position & Tax Return', 'موقف ضريبة القيمة المضافة والإقرار')}
           sub={`${T('Company rate', 'نسبة الشركة')} ${rates.vat}% · ${T('output − input', 'المبيعات − المشتريات')}`}
           action={<button type="button" className="btn-ghost !py-1.5 !px-3 text-xs" onClick={() => onTab('purchases')}><ArrowRight size={13} />{T('Bills', 'الفواتير')}</button>}
         >
-          <Line label={T('Output VAT (sales)', 'ضريبة المبيعات')} value={money(s.salesVat)} tone="text-emerald-500" />
-          <Line label={T('Input VAT (purchases)', 'ضريبة المشتريات')} value={`− ${money(s.purchasesVat)}`} tone="text-terra" />
+          <Line label={T('Output VAT (sales)', 'ضريبة المبيعات المحصلة')} value={money(s.salesVat)} tone="text-emerald-500" />
+          <Line label={T('Input VAT (purchases)', 'ضريبة المشتريات المدفوعة')} value={`− ${money(s.purchasesVat)}`} tone="text-terra" />
           <div className="my-1.5 h-px bg-line/10" />
-          <Line label={T('Payable to the tax office', 'المستحق للضريبة')} value={money(s.vatDue)} strong tone={s.vatDue >= 0 ? 'text-gold' : 'text-emerald-500'} />
+          <Line label={T('Payable to the Tax Department', 'المستحق لدائرة ضريبة الدخل')} value={money(s.vatDue)} strong tone={s.vatDue >= 0 ? 'text-gold' : 'text-emerald-500'} />
           <p className="mt-3 text-[11px] leading-snug text-subtle">
-            {T('A negative amount means you paid more input VAT than you charged — it carries forward.', 'القيمة السالبة تعني أن ضريبة مشترياتك أكبر من مبيعاتك — تُرحّل للفترة القادمة.')}
+            {T('A negative amount means input tax credit exceeds output tax — carried forward to the next period.', 'القيمة السالبة تعني وجود رصيد ضريبي دائن لصالحك يُرحّل للفترة القادمة.')}
           </p>
+        </Panel>
+      </div>
+
+      {/* AR and AP Aging Analysis Grid */}
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Panel title={T('Accounts Receivable Aging (Client Receivables)', 'أعمار ذمم العملاء (المقبوضات)')} sub={T('Breakdown of unpaid sales invoices by delay brackets', 'توزيع مبالغ الفواتير غير المحصلة حسب فترات التأخير')}>
+          <div className="space-y-2 text-xs">
+            <Line label={T('Current (0–30 Days)', 'حالي (أقل من ٣٠ يوم)')} value={money(s.arAging?.current || 0)} tone="text-emerald-500" />
+            <Line label={T('31–60 Days Overdue', 'متأخر ٣١–٦٠ يوم')} value={money(s.arAging?.days30 || 0)} tone="text-gold" />
+            <Line label={T('61–90 Days Overdue', 'متأخر ٦١–٩٠ يوم')} value={money(s.arAging?.days60 || 0)} tone="text-amber-500" />
+            <Line label={T('Over 90 Days (Critical Collection)', 'متأخر أكثر من ٩٠ يوم (حرج)')} value={money(s.arAging?.days90Plus || 0)} strong tone="text-red-500" />
+            <div className="my-1.5 h-px bg-line/10" />
+            <Line label={T('Total Outstanding Receivables', 'إجمالي الذمم المدينة')} value={money(s.receivables)} strong />
+          </div>
+        </Panel>
+
+        <Panel title={T('Accounts Payable Aging (Supplier Dues)', 'أعمار ذمم الموردين (المدفوعات)')} sub={T('Supplier bills awaiting settlement by credit period', 'فواتير الموردين المستحقة حسب فترات الائتمان')}>
+          <div className="space-y-2 text-xs">
+            <Line label={T('Current (Due in 30 Days)', 'حالي (مستحق خلال ٣٠ يوم)')} value={money(s.apAging?.current || 0)} tone="text-emerald-500" />
+            <Line label={T('31–60 Days Outstanding', 'مستحق ٣١–٦٠ يوم')} value={money(s.apAging?.days30 || 0)} tone="text-gold" />
+            <Line label={T('61–90 Days Outstanding', 'مستحق ٦١–٩٠ يوم')} value={money(s.apAging?.days60 || 0)} tone="text-amber-500" />
+            <Line label={T('Over 90 Days (Late Supplier Bills)', 'مستحق أكثر من ٩٠ يوم')} value={money(s.apAging?.days90Plus || 0)} strong tone="text-red-500" />
+            <div className="my-1.5 h-px bg-line/10" />
+            <Line label={T('Total Outstanding Payables', 'إجمالي الذمم الدائنة')} value={money(s.payables)} strong />
+          </div>
         </Panel>
       </div>
 
@@ -252,7 +279,7 @@ function Sales({ s, onNav }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
         <Tip icon={Receipt} label={T('Invoiced', 'المفوتر')} value={money(s.salesGross)} hint={`${s.invoiceCount} ${T('invoices', 'فاتورة')}`} />
         <Tip icon={Wallet} label={T('Collected', 'المحصّل')} value={money(s.collected)} hint={T('Money in the bank', 'المال في البنك')} tone="emerald" />
         <Tip icon={AlertTriangle} label={T('Receivables', 'ذمم العملاء')} value={money(s.receivables)} hint={`${T('Overdue', 'متأخر')} ${money(s.receivablesOverdue)}`} tone="terra" />
@@ -359,13 +386,14 @@ function Sales({ s, onNav }) {
 
 /* ================= Purchases ================= */
 function PurchaseEditor({ draft, onClose, onSave, onDelete }) {
-  const { T, money, rates } = useApp();
+  const { T, money, rates, projects = [] } = useApp();
   const [d, setD] = useState(draft);
+  const [newProjectTitle, setNewProjectTitle] = useState(draft.newProjectTitle || '');
   const v = purchaseView(d, rates.vat);
   const set = (p) => setD({ ...d, ...p });
   return (
     <Modal wide title={d.no} onClose={onClose}>
-      <form onSubmit={(e) => { e.preventDefault(); onSave(d); }} className="space-y-4">
+      <form onSubmit={(e) => { e.preventDefault(); onSave({ ...d, newProjectTitle }); }} className="space-y-4">
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
             <EntityPicker
@@ -379,6 +407,24 @@ function PurchaseEditor({ draft, onClose, onSave, onDelete }) {
             <select className="input" value={d.cat} onChange={(e) => set({ cat: e.target.value })}>
               {PUR_CATS.map(([k, en, ar]) => <option key={k} value={k}>{T(en, ar)}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="label">{T('Allocate to Project', 'تخصيص لمشروع')}</label>
+            <select className="input" value={d.projectId || ''} onChange={(e) => set({ projectId: e.target.value })}>
+              <option value="">{T('General Overhead (No project)', 'مصروف عام (بدون مشروع)')}</option>
+              <option value="__new">{T('+ Create new project…', '+ إنشاء مشروع جديد…')}</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.no} — {p.title}</option>
+              ))}
+            </select>
+            {d.projectId === '__new' && (
+              <input
+                className="input mt-2"
+                value={newProjectTitle}
+                onChange={(e) => setNewProjectTitle(e.target.value)}
+                placeholder={T('Project title (required to create)', 'عنوان المشروع (مطلوب للإنشاء)')}
+              />
+            )}
           </div>
           <Field label={T('Bill date', 'تاريخ الفاتورة')} type="date" v={d.date} on={(date) => set({ date })} />
           <Field label={T('Pay by', 'تاريخ السداد')} type="date" v={d.due} on={(due) => set({ due })} />
@@ -394,7 +440,7 @@ function PurchaseEditor({ draft, onClose, onSave, onDelete }) {
 
         <div className="flex items-center gap-3 flex-wrap text-sm">
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" className="accent-[#C9A45C]" checked={d.vat !== false} onChange={(e) => set({ vat: e.target.checked })} />
+            <input type="checkbox" className="h-4 w-4 shrink-0 accent-gold" checked={d.vat !== false} onChange={(e) => set({ vat: e.target.checked })} />
             {T('Add VAT', 'إضافة ضريبة')} <span className="tabular-nums text-subtle">{v.rate}%</span>
           </label>
           <span className="text-[11px] text-subtle">{T('Paid by', 'دُفعت من')}</span>
@@ -431,17 +477,19 @@ function PurchaseEditor({ draft, onClose, onSave, onDelete }) {
 }
 
 function Purchases({ s }) {
-  const { T, lang, money, rates, purchases, suppliers, upd } = useApp();
+  const { T, lang, money, rates, purchases, suppliers, projects = [], addProject, upd } = useApp();
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('');
+  const [prjFilter, setPrjFilter] = useState('');
   const [edit, setEdit] = useState(null);
 
   const rows = useMemo(
     () => s.purchases
       .filter((v) => (!cat || (v.p.cat || 'other') === cat))
+      .filter((v) => !prjFilter || (prjFilter === '__none' ? !v.p.projectId : v.p.projectId === prjFilter))
       .filter((v) => !q || `${v.supplier} ${v.p.no} ${v.p.notes || ''}`.toLowerCase().includes(q.toLowerCase()))
       .sort((a, b) => String(b.p.date).localeCompare(String(a.p.date))),
-    [s.purchases, q, cat],
+    [s.purchases, q, cat, prjFilter],
   );
 
   const sums = rows.reduce(
@@ -455,12 +503,30 @@ function Purchases({ s }) {
   const blank = () => ({
     id: uid('pur'), no: nextNo(purchases, 'PUR'), date: todayStr(), due: addDays(todayStr(), 30),
     supplier: '', supplierId: '', cat: 'materials', amount: 0, vat: true, vatRate: rates.vat, paid: 0,
-    paidBy: 'company', method: 'bank', notes: '',
+    paidBy: 'company', method: 'bank', notes: '', projectId: '',
   });
 
   const save = (d) => {
+    let projectId = d.projectId || '';
+    if (projectId === '__new') {
+      const ttl = String(d.newProjectTitle || '').trim();
+      if (!ttl) return alert(T('Please enter a project title first.', 'يرجى إدخال عنوان المشروع أولاً.'));
+      const created = addProject({
+        title: ttl,
+        status: 'in_progress',
+        budgetCost: Number(d.amount || 0),
+        notes: d.notes || '',
+      });
+      projectId = created.id;
+    }
     const sup = (suppliers || []).find((x) => x.id === d.supplierId);
-    const rec = { ...d, supplier: String(sup ? sup.name : d.supplier || '').trim(), updated: new Date().toISOString() };
+    const rec = {
+      ...d,
+      projectId,
+      supplier: String(sup ? sup.name : d.supplier || '').trim(),
+      updated: new Date().toISOString(),
+    };
+    delete rec.newProjectTitle;
     upd((o) => ({
       purchases: o.purchases.some((x) => x.id === rec.id)
         ? o.purchases.map((x) => (x.id === rec.id ? rec : x))
@@ -492,7 +558,7 @@ function Purchases({ s }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
         <Tip icon={ShoppingCart} label={T('Bills', 'الفواتير')} value={money(s.purchasesGross)} hint={`${s.purchaseCount} ${T('bills', 'فاتورة')} · ${T('VAT', 'ضريبة')} ${money(s.purchasesVat)}`} tone="sky" />
         <Tip icon={Check} label={T('Paid to suppliers', 'المدفوع للموردين')} value={money(s.supplierPaid)} hint={T('Across all bills', 'على كل الفواتير')} tone="emerald" />
         <Tip icon={ArrowRight} label={T('Still owed', 'المتبقي للموردين')} value={money(s.payables)} hint={T('Accounts payable', 'ذمم دائنة')} tone="terra" />
@@ -508,6 +574,11 @@ function Purchases({ s }) {
           <option value="">{T('All categories', 'كل الفئات')}</option>
           {PUR_CATS.map(([k, en, ar]) => <option key={k} value={k}>{T(en, ar)}</option>)}
         </select>
+        <select className="input !w-auto !py-2 !text-xs" value={prjFilter} onChange={(e) => setPrjFilter(e.target.value)}>
+          <option value="">{T('All projects', 'كل المشاريع')}</option>
+          <option value="__none">{T('No project (overhead)', 'بدون مشروع (عام)')}</option>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.no} — {p.title}</option>)}
+        </select>
         <span className="hidden text-[11px] tabular-nums text-subtle sm:inline">{rows.length}/{s.purchases.length}</span>
         <div className="ms-auto flex items-center gap-2">
           <button type="button" className="btn-ghost !py-2 !px-3 text-xs" onClick={exportCsv}><Download size={14} />{T('CSV', 'CSV')}</button>
@@ -519,7 +590,7 @@ function Purchases({ s }) {
         <table className="w-full text-sm">
           <thead>
             <tr>
-              {['#', T('Date', 'التاريخ'), T('Supplier', 'المورد'), T('Category', 'الفئة')].map((h, i) => <th key={i} className="whitespace-nowrap p-3 text-start">{h}</th>)}
+              {['#', T('Date', 'التاريخ'), T('Supplier', 'المورد'), T('Category', 'الفئة'), T('Project', 'المشروع')].map((h, i) => <th key={i} className="whitespace-nowrap p-3 text-start">{h}</th>)}
               {[T('Net', 'الصافي'), T('VAT', 'ضريبة'), T('Total', 'الإجمالي'), T('Paid', 'المدفوع'), T('Balance', 'المتبقي')].map((h, i) => <th key={i} className="whitespace-nowrap p-3 text-end">{h}</th>)}
               <th className="whitespace-nowrap p-3 text-start">{T('Status', 'الحالة')}</th>
               <th className="p-3" />
@@ -534,6 +605,7 @@ function Purchases({ s }) {
                   <td className="whitespace-nowrap p-3 text-xs tabular-nums text-subtle" dir="ltr">{v.p.date}</td>
                   <td className="min-w-[130px] p-3">{v.supplier}</td>
                   <td className="whitespace-nowrap p-3 text-xs text-subtle">{catName(PUR_CATS, v.p.cat, lang)}</td>
+                  <td className="whitespace-nowrap p-3 text-xs text-subtle">{v.p.projectId ? ((projects.find((p) => p.id === v.p.projectId)?.no) || '—') : '—'}</td>
                   <td className="p-3 text-end tabular-nums">{money(v.net)}</td>
                   <td className="p-3 text-end tabular-nums text-muted">{money(v.vat)}</td>
                   <td className="p-3 text-end font-semibold tabular-nums">{money(v.total)}</td>
@@ -555,7 +627,7 @@ function Purchases({ s }) {
             })}
             {!rows.length && (
               <tr>
-                <td colSpan="11" className="p-1">
+                <td colSpan="12" className="p-1">
                   <EmptyState
                     icon={ShoppingCart}
                     title={T('No supplier bills yet', 'لا توجد فواتير موردين بعد')}
@@ -571,7 +643,7 @@ function Purchases({ s }) {
           {rows.length > 0 && (
             <tfoot>
               <tr className="border-t border-line/20 bg-line/[0.03]">
-                <td className="p-3 text-[10px] font-bold uppercase tracking-[0.1em] text-subtle" colSpan="4">{T('Totals', 'الإجمالي')}</td>
+                <td className="p-3 text-[10px] font-bold uppercase tracking-[0.1em] text-subtle" colSpan="5">{T('Totals', 'الإجمالي')}</td>
                 <td className="p-3 text-end tabular-nums">{money(sums.net)}</td>
                 <td className="p-3 text-end tabular-nums text-muted">{money(sums.vat)}</td>
                 <td className="p-3 text-end font-bold tabular-nums">{money(sums.total)}</td>
@@ -591,13 +663,15 @@ function Purchases({ s }) {
 
 /* ================= Pocket money ================= */
 function PocketMoney({ s }) {
-  const { T, lang, money, cash, upd } = useApp();
+  const { T, lang, money, cash, projects = [], addProject, upd } = useApp();
   const [date, setDate] = useState(todayStr());
   const [label, setLabel] = useState('');
   const [amount, setAmount] = useState('');
   const [cat, setCat] = useState('other');
   const [openAmt, setOpenAmt] = useState('');
   const [paidBy, setPaidBy] = useState('cash');
+  const [projectId, setProjectId] = useState('');
+  const [newProjectTitle, setNewProjectTitle] = useState('');
   const [sup, setSup] = useState(null);
 
   const days = useMemo(() => cash.map(cashView).sort((a, b) => b.date.localeCompare(a.date)), [cash]);
@@ -621,12 +695,25 @@ function PocketMoney({ s }) {
     e.preventDefault();
     const n = parseFloat(amount);
     if (!day || !label.trim() || !Number.isFinite(n) || n <= 0) return;
+    let pid = projectId || '';
+    if (pid === '__new') {
+      const ttl = String(newProjectTitle || '').trim();
+      if (!ttl) return alert(T('Please enter a project title first.', 'يرجى إدخال عنوان المشروع أولاً.'));
+      const created = addProject({
+        title: ttl,
+        status: 'in_progress',
+        budgetCost: n,
+        notes: label.trim(),
+      });
+      pid = created.id;
+    }
     const rec = {
       id: uid('e'), label: label.trim(), amount: n, cat, at: new Date().toTimeString().slice(0, 5),
       paidBy, supplierId: sup ? sup.id : '', supplier: sup ? sup.name : '',
+      projectId: pid,
     };
     upd((o) => ({ cash: o.cash.map((d) => (d.id === day.id ? { ...d, expenses: [...(d.expenses || []), rec] } : d)) }));
-    setLabel(''); setAmount(''); setSup(null); setPaidBy('cash');
+    setLabel(''); setAmount(''); setSup(null); setPaidBy('cash'); setProjectId(''); setNewProjectTitle('');
   };
 
   const delExpense = (id) => upd((o) => ({ cash: o.cash.map((d) => (d.id === day.id ? { ...d, expenses: (d.expenses || []).filter((x) => x.id !== id) } : d)) }));
@@ -655,7 +742,7 @@ function PocketMoney({ s }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
         <Tip icon={Banknote} label={T('Cash in hand', 'النقد المتبقي')} value={money(s.cashOnHand)} hint={s.latestDay ? `${T('Latest box', 'آخر صندوق')} ${s.latestDay.date}` : T('No box opened yet', 'لم يُفتح صندوق بعد')} tone={s.cashOnHand < 0 ? 'red' : 'emerald'} />
         <Tip icon={CalendarDays} label={T('Spent this month', 'مصروف هذا الشهر')} value={money(monthSpent)} hint={T('From the cash box', 'من الصندوق')} tone="terra" />
         <Tip icon={Wallet} label={T('Paid outside the box', 'مدفوع خارج الصندوق')} value={money(monthOutside)} hint={T('Company account or a partner', 'حساب الشركة أو أحد الشركاء')} tone="sky" />
@@ -698,7 +785,7 @@ function PocketMoney({ s }) {
                 <button type="button" className="btn-ghost !py-1.5 !px-3 text-xs text-red-400" onClick={() => delDay(day.id)}><Trash2 size={13} /></button>
               </div>}
             >
-              <div className="grid grid-cols-3 gap-3 items-end">
+              <div className="grid grid-cols-2 items-end gap-3 sm:grid-cols-3">
                 <div>
                   <label className="label">{T('Handed over', 'المسلّم')}</label>
                   <AmountInput v={day.open} onCommit={setOpen} aria-label={T('Handed over', 'المسلّم')} />
@@ -708,7 +795,7 @@ function PocketMoney({ s }) {
                   <div className="text-lg font-extrabold tabular-nums text-terra">{money(day.spent)}</div>
                   {day.outside > 0 && <div className="text-[10px] tabular-nums text-subtle">{T('Outside the box', 'خارج الصندوق')}: {money(day.outside)}</div>}
                 </div>
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <div className="label">{T('Remaining', 'المتبقي')}</div>
                   <div className={`text-lg font-extrabold tabular-nums ${day.over ? 'text-red-400' : 'text-emerald-500'}`}>{money(day.remaining)}</div>
                 </div>
@@ -738,6 +825,22 @@ function PocketMoney({ s }) {
                     <EntityPicker kind="supplier" value={sup ? sup.id : ''} onPick={(x) => setSup(x)} placeholder={T('Search suppliers…', 'بحث في الموردين…')} />
                   </div>
                 </div>
+                <div className="flex gap-2 flex-wrap items-end">
+                  <div className="min-w-[220px] flex-1">
+                    <label className="label">{T('Related project (optional)', 'المشروع المرتبط (اختياري)')}</label>
+                    <select className="input !py-1.5 !text-xs" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+                      <option value="">{T('General expense (no project)', 'مصروف عام (بدون مشروع)')}</option>
+                      <option value="__new">{T('+ Create new project…', '+ إنشاء مشروع جديد…')}</option>
+                      {projects.map((p) => <option key={p.id} value={p.id}>{p.no} — {p.title}</option>)}
+                    </select>
+                  </div>
+                  {projectId === '__new' && (
+                    <div className="min-w-[220px] flex-1">
+                      <label className="label">{T('New project title', 'عنوان المشروع الجديد')}</label>
+                      <input className="input !py-1.5" value={newProjectTitle} onChange={(e) => setNewProjectTitle(e.target.value)} placeholder={T('Example: Al Ameed branch facade', 'مثال: واجهة فرع العميد')} />
+                    </div>
+                  )}
+                </div>
                 <p className="text-[11px] leading-relaxed text-subtle">
                   {T('Only “Pocket money” reduces the box. Company and partner payments are tracked separately and never touch the daily remainder.',
                     'فقط «نقد المصروف» يُخصم من الصندوق. مدفوعات الشركة والشركاء تُتابع منفصلة ولا تمس المتبقي اليومي.')}
@@ -745,18 +848,19 @@ function PocketMoney({ s }) {
               </form>
               <div className="divide-y divide-line/10">
                 {day.expenses.map((e) => (
-                  <div key={e.id} className="flex items-center gap-3 py-2 text-sm">
-                    <span className="w-10 text-[10px] tabular-nums text-subtle" dir="ltr">{e.at || ''}</span>
-                    <span className="badge whitespace-nowrap border border-line/10 bg-surface-2 text-[10px] text-muted">{catName(CASH_CATS, e.cat, lang)}</span>
+                  <div key={e.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2 text-sm sm:flex-nowrap sm:gap-3">
+                    <span className="hidden w-10 shrink-0 text-[10px] tabular-nums text-subtle sm:inline" dir="ltr">{e.at || ''}</span>
+                    <span className="badge shrink-0 whitespace-nowrap border border-line/10 bg-surface-2 text-[10px] text-muted">{catName(CASH_CATS, e.cat, lang)}</span>
                     <span className="min-w-0 flex-1 truncate">
                       {e.label}
                       {e.supplier && <span className="text-[10px] text-subtle"> · {e.supplier}</span>}
+                      {e.projectId && <span className="text-[10px] text-subtle"> · {(projects.find((p) => p.id === e.projectId)?.no) || 'PRJ'}</span>}
                     </span>
-                    <span className={`badge whitespace-nowrap text-[10px] ${isCash(e.paidBy) ? 'border border-line/10 bg-surface-2 text-muted' : isPartner(e.paidBy) ? 'bg-amber-500/15 text-amber-500' : 'bg-sky-500/15 text-sky-400'}`}>
+                    <span className={`badge shrink-0 whitespace-nowrap text-[10px] ${isCash(e.paidBy) ? 'border border-line/10 bg-surface-2 text-muted' : isPartner(e.paidBy) ? 'bg-amber-500/15 text-amber-500' : 'bg-sky-500/15 text-sky-400'}`}>
                       {T(payerOf(e.paidBy).en, payerOf(e.paidBy).ar)}
                     </span>
-                    <span className="tabular-nums font-semibold">{money(e.amount)}</span>
-                    <button type="button" className="text-red-400/70 hover:text-red-400" onClick={() => delExpense(e.id)}><Trash2 size={13} /></button>
+                    <span className="shrink-0 tabular-nums font-semibold">{money(e.amount)}</span>
+                    <button type="button" className="shrink-0 text-red-400/70 hover:text-red-400" onClick={() => delExpense(e.id)}><Trash2 size={13} /></button>
                   </div>
                 ))}
                 {!day.expenses.length && <p className="py-4 text-center text-sm text-subtle">{T('Nothing spent yet today.', 'لا مصروفات في هذا اليوم.')}</p>}
@@ -874,9 +978,9 @@ const TABS = [
 ];
 
 export default function Accounting({ onNav }) {
-  const { T, invoices, quotes, purchases, cash, rates, customers, suppliers } = useApp();
+  const { T, invoices, quotes, purchases, cash, payrolls, rates, customers, suppliers } = useApp();
   const [tab, setTab] = useState('overview');
-  const s = useMemo(() => accountingSummary({ invoices, quotes, purchases, cash, rates }), [invoices, quotes, purchases, cash, rates]);
+  const s = useMemo(() => accountingSummary({ invoices, quotes, purchases, cash, payrolls, rates }), [invoices, quotes, purchases, cash, payrolls, rates]);
   const count = (k) => (k === 'sales' ? s.invoiceCount
     : k === 'purchases' ? s.purchaseCount
       : k === 'cash' ? s.pettyDays

@@ -5,12 +5,12 @@ import { useApp, totals } from './store.jsx';
 
 /** Brand-derived document colour themes. `none` = monochrome outline, no fills. */
 export const PALETTE = {
-  gold: { fill: '#C9A45C', on: '#161616', text: '#A88438', soft: '#F6EDD9', label: ['Gold', 'ذهبي'] },
-  terra: { fill: '#CB6B47', on: '#FFFFFF', text: '#B0522F', soft: '#F9E4DB', label: ['Terracotta', 'تيراكوتا'] },
-  ink: { fill: '#161616', on: '#F0E4D6', text: '#161616', soft: '#EFEDEA', label: ['Ink', 'فحمي'] },
-  cream: { fill: '#F0E4D6', on: '#161616', text: '#A88438', soft: '#FAF6F1', label: ['Cream', 'كريمي'] },
+  gold: { fill: '#C4A05C', on: '#161412', text: '#A88438', soft: '#FAF6F0', label: ['Gold', 'ذهبي'] },
+  terra: { fill: '#C46038', on: '#FFFFFF', text: '#B0522F', soft: '#FBECE5', label: ['Terracotta', 'تيراكوتا'] },
+  ink: { fill: '#161412', on: '#FAF6F0', text: '#161412', soft: '#ECE8DF', label: ['Ink', 'فحمي'] },
+  cream: { fill: '#FAF6F0', on: '#161412', text: '#A88438', soft: '#FAF6F0', label: ['Cream', 'كريمي'] },
   black: { fill: '#000000', on: '#FFFFFF', text: '#000000', soft: '#F1F1F1', label: ['Black', 'أسود'] },
-  none: { fill: 'transparent', on: '#161616', text: '#161616', soft: '#FFFFFF', label: ['None', 'بدون لون'] },
+  none: { fill: 'transparent', on: '#161412', text: '#161412', soft: '#FFFFFF', label: ['None', 'بدون لون'] },
 };
 export const STYLES = [['compact', 'Compact', 'مضغوط'], ['bubbles', 'Bubbles', 'فقاعات'], ['waves', 'Waves', 'أمواج']];
 
@@ -52,9 +52,9 @@ export function Doc({ kind, doc, client, dl: dlProp, id = 'print-area', company:
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
       {logo}
       <div style={{ color }}>
-        <div style={{ fontFamily: '"Cormorant Garamond", serif', fontSize: 22, fontWeight: 600, lineHeight: 1.1 }}>
-          {c.name?.en}{c.name?.en && c.name?.ar && <span style={{ opacity: 0.5 }}> | </span>}
-          {c.name?.ar && <span style={{ fontFamily: 'Cairo, sans-serif', fontSize: 17 }}>{c.name.ar}</span>}
+        <div style={{ fontFamily: 'Mont, Montserrat, -apple-system, sans-serif', fontSize: 20, fontWeight: 800, letterSpacing: '0.04em', lineHeight: 1.1 }}>
+          {c.name?.en}{c.name?.en && c.name?.ar && <span style={{ opacity: 0.4 }}> | </span>}
+          {c.name?.ar && <span style={{ fontFamily: '"DIN Next LT Arabic", Cairo, -apple-system, sans-serif', fontSize: 18, fontWeight: 700 }}>{c.name.ar}</span>}
         </div>
         {x(c.tagline) && <div style={{ fontSize: 9.5, opacity: 0.7, marginTop: 3 }}>{x(c.tagline)}</div>}
       </div>
@@ -230,7 +230,7 @@ export function Doc({ kind, doc, client, dl: dlProp, id = 'print-area', company:
   );
 
   return (
-    <div id={id} dir={ar ? 'rtl' : 'ltr'} style={{ width: 794, minHeight: 1122, background: '#ffffff', color: '#161616', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', fontFamily: ar ? 'Cairo, sans-serif' : '"Plus Jakarta Sans", sans-serif' }}>
+  <div id={id} dir={ar ? 'rtl' : 'ltr'} style={{ width: 794, minHeight: 1122, background: '#ffffff', color: '#161616', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', fontFamily: ar ? '"DIN Next LT Arabic", "IBM Plex Sans Arabic", sans-serif' : 'Mont, "Inter Tight", sans-serif' }}>
       {header}
       <div style={{ padding: '18px 40px 24px', flex: 1 }}>{body}</div>
       {footer}

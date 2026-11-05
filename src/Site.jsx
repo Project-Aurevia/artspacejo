@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   Sun, Moon, Languages, ShoppingCart, Signpost, Printer, Share2, Compass, Check, X, Trash2, Upload,
   Layers, Lightbulb, PanelTop, Store, Palette, Calculator, ArrowRight, Phone, Mail, MapPin, Send, Menu,
-  Ruler, CalendarCheck, MessageCircle, Quote, Star, ShieldCheck,
+  Ruler, CalendarCheck, MessageCircle, Quote, Star, ShieldCheck, ChevronLeft, ChevronRight, Camera, Plus,
 } from 'lucide-react';
 import Logo, { Mark } from './Logo.jsx';
-import { useApp, uid, CATS } from './store.jsx';
+import { useApp, uid, CATS, galleryOf } from './store.jsx';
 import { signageQuote, printQuote, addonOn } from './pricing.js';
 import { uploadFile } from './api.js';
 import { Dialog, Reveal } from './ui.jsx';
@@ -46,7 +46,7 @@ function Header({ onCart }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang]);
 
-  const iconBtn = `grid h-9 w-9 place-items-center rounded-full border transition ${
+  const iconBtn = `grid h-10 w-10 place-items-center rounded-full border transition sm:h-9 sm:w-9 ${
     dark
       ? 'border-white/20 text-cream/75 hover:border-gold/60 hover:text-cream'
       : 'border-line/15 text-fg/70 hover:border-gold/60 hover:text-fg'
@@ -56,8 +56,8 @@ function Header({ onCart }) {
     <header
       className={`fixed inset-x-0 top-0 z-40 border-b backdrop-blur-2xl transition-colors duration-300 ${
         dark
-          ? `border-white/10 text-cream ${scrolled ? 'bg-ink/85 shadow-[0_20px_44px_-32px_rgba(0,0,0,.95)]' : 'bg-ink/50'}`
-          : `border-line/12 text-fg ${scrolled ? 'bg-white/85 shadow-[0_20px_44px_-32px_rgba(24,21,18,.32)]' : 'bg-white/55'}`
+          ? `border-white/10 text-cream ${scrolled ? 'bg-ink/85 shadow-lift' : 'bg-ink/50'}`
+          : `border-line/12 text-fg ${scrolled ? 'bg-canvas/85 shadow-soft' : 'bg-canvas/55'}`
       }`}
     >
       <div className="mx-auto flex h-[68px] max-w-[92rem] items-center justify-between gap-3 px-5 md:px-8">
@@ -68,7 +68,7 @@ function Header({ onCart }) {
             <a
               key={id}
               href={`#${id}`}
-              aria-current={active === id ? 'true' : undefined}
+              aria-current={active === id ? 'location' : undefined}
               className={`relative px-2.5 py-2 text-[11px] uppercase tracking-[0.14em] transition ${
                 active === id ? 'text-gold' : dark ? 'text-cream/55 hover:text-cream' : 'text-muted hover:text-fg'
               }`}
@@ -100,6 +100,7 @@ function Header({ onCart }) {
             className={`${iconBtn} lg:hidden`}
             aria-label={T('Menu', 'القائمة')}
             aria-expanded={open}
+            aria-controls="mobile-nav"
             onClick={() => setOpen((v) => !v)}
           >
             {open ? <X size={16} /> : <Menu size={16} />}
@@ -108,12 +109,13 @@ function Header({ onCart }) {
       </div>
 
       {open && (
-        <div className={`animate-fade border-t px-5 pb-5 pt-2 md:px-8 lg:hidden ${dark ? 'border-white/12 bg-ink/95' : 'border-line/12 bg-white/95'}`}>
+        <div id="mobile-nav" className={`animate-fade border-t px-5 pb-5 pt-2 md:px-8 lg:hidden ${dark ? 'border-white/12 bg-ink/95' : 'border-line/12 bg-canvas/95'}`}>
           <nav aria-label="Mobile" className="grid">
             {links.map(([id, l]) => (
               <a
                 key={id}
                 href={`#${id}`}
+                aria-current={active === id ? 'location' : undefined}
                 onClick={() => setOpen(false)}
                 className={`flex items-center justify-between border-b py-3.5 text-[13px] uppercase tracking-[0.12em] transition hover:text-gold ${
                   dark ? 'border-white/10 text-cream/65' : 'border-line/10 text-muted'
@@ -135,14 +137,16 @@ function Header({ onCart }) {
 
 /* ================= Shared bits ================= */
 const Section = ({ id, kicker, title, sub, children, className = '' }) => (
-  <section id={id} className={`scroll-mt-24 px-5 py-20 md:px-8 md:py-28 ${className}`}>
+  <section id={id} className={`scroll-mt-24 px-5 py-14 sm:py-20 md:px-8 md:py-28 ${className}`}>
     <div className="mx-auto max-w-[92rem]">
       <div className="mb-12 grid gap-6 md:grid-cols-12 md:items-end md:gap-8">
         <div className="md:col-span-7">
           {kicker && <p className="eyebrow mb-5">{kicker}</p>}
           <h2 className="display-2">{title}</h2>
         </div>
-        {sub && <p className="text-sm leading-loose text-muted md:col-span-4 md:col-start-9">{sub}</p>}
+        {sub && (
+          <p className="border-s-2 border-gold/70 ps-4 text-[15px] font-medium leading-loose text-fg/80 md:col-span-4 md:col-start-9">{sub}</p>
+        )}
       </div>
       {children}
     </div>
@@ -166,9 +170,117 @@ function ServiceGroup({ icon: Icon, title, items }) {
   );
 }
 
+/* Photo background with a dark scrim so white text always stays readable (any image, light or dark mode). */
+/* Photos live in /public/services (see CREDITS.md there). Branded art underneath is the fallback if a file is missing. */
+const unsplash = (name) => `/services/${name}.jpg`;
+function PhotoBg({ src }) {
+  const art = [
+    `url(${src})`,
+    'linear-gradient(rgba(240,228,214,.07) 1px, transparent 1px)',
+    'linear-gradient(90deg, rgba(240,228,214,.07) 1px, transparent 1px)',
+    'radial-gradient(70% 60% at 85% 12%, rgba(201,164,92,.55), transparent 62%)',
+    'radial-gradient(60% 55% at 10% 85%, rgba(203,107,71,.45), transparent 60%)',
+    'linear-gradient(135deg,#2b2218,#161616 60%,#33261a)',
+  ].join(',');
+  return (
+    <>
+      <div
+        className="absolute inset-0 -z-20 transition-transform duration-700 ease-out group-hover:scale-105"
+        style={{ backgroundImage: art, backgroundSize: 'cover, 36px 36px, 36px 36px, auto, auto, auto', backgroundPosition: 'center' }}
+        aria-hidden="true"
+      />
+      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-black/80 via-black/40 to-transparent" aria-hidden="true" />
+    </>
+  );
+}
+
+/* Photo service card: image, title, short description, and capability chips. */
+function ServiceCard({ icon: Icon, title, desc, items, img, index }) {
+  return (
+    <Reveal delay={index * 80} className="group relative isolate flex min-h-[26rem] flex-col justify-end overflow-hidden rounded-3xl border border-line/15 p-6 text-white md:p-7">
+      <PhotoBg src={img} />
+      <span className="absolute start-6 top-6 grid h-11 w-11 place-items-center rounded-2xl border border-white/25 bg-black/35 text-gold backdrop-blur-md">
+        <Icon size={18} aria-hidden="true" />
+      </span>
+      <span className="absolute end-6 top-6 text-[11px] font-bold tabular-nums tracking-[0.2em] text-white/70">0{index + 1}</span>
+      <h3 className="text-xl font-bold leading-snug tracking-tight text-white drop-shadow">{title}</h3>
+      <p className="mt-2 text-sm leading-relaxed text-white/85">{desc}</p>
+      <ul className="mt-4 flex flex-wrap gap-2">
+        {items.map((x) => (
+          <li key={x} className="rounded-full border border-white/25 bg-black/40 px-3 py-1 text-[11.5px] font-medium text-white backdrop-blur-sm">{x}</li>
+        ))}
+      </ul>
+    </Reveal>
+  );
+}
+
+/* Expandable strategy list: one open at a time, click to reveal description. Dark-section styling. */
+function StrategyAccordion({ items }) {
+  const uid = useId();
+  const [open, setOpen] = useState(0);
+  return (
+    <div className="content-start divide-y divide-white/10 self-start border-y border-white/10">
+      {items.map((it, i) => {
+        const on = open === i;
+        return (
+          <Reveal key={it.title} delay={i * 70}>
+            <div className={`transition-colors ${on ? 'bg-white/[0.04]' : ''}`}>
+            <h3>
+              <button
+                type="button"
+                aria-expanded={on}
+                aria-controls={`${uid}-p${i}`}
+                id={`${uid}-b${i}`}
+                onClick={() => setOpen(on ? -1 : i)}
+                className="group flex w-full items-center gap-4 px-2 py-5 text-start sm:px-4"
+              >
+                <span className={`w-8 shrink-0 text-sm font-extrabold tabular-nums transition-colors ${on ? 'text-gold' : 'text-cream/35 group-hover:text-cream/70'}`}>0{i + 1}</span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block text-[16px] font-bold leading-snug transition-colors ${on ? 'text-gold' : 'text-cream'}`}>{it.title}</span>
+                  <span className="mt-0.5 block text-xs text-cream/45">{it.tag}</span>
+                </span>
+                <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border transition-all duration-300 ${on ? 'rotate-45 border-gold bg-gold text-ink' : 'border-white/20 text-cream/70 group-hover:border-gold/60'}`}>
+                  <Plus size={15} aria-hidden="true" />
+                </span>
+              </button>
+            </h3>
+            <div
+              id={`${uid}-p${i}`}
+              role="region"
+              aria-labelledby={`${uid}-b${i}`}
+              className={`grid transition-[grid-template-rows] duration-300 ease-out ${on ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+            >
+              <div className="overflow-hidden">
+                <div className="ps-14 pe-4 pb-6 sm:ps-16">
+                  <p className="text-sm leading-loose text-cream/75">{it.desc}</p>
+                  <ul className="mt-4 flex flex-wrap gap-2">
+                    {it.points.map((p) => (
+                      <li key={p} className="rounded-full border border-gold/35 bg-gold/10 px-3 py-1 text-[11.5px] font-medium text-gold">{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+            </div>
+          </Reveal>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ================= Hero ================= */
 function Hero({ onSurvey, onVisit }) {
-  const { T } = useApp();
+  const { T, lang } = useApp();
+  const words = [
+    ['impossible to ignore', 'يستحيل تجاهلها'], ['undeniable', 'لا تُنكَر'], ['unforgettable', 'لا تُنسى'],
+    ['immortal', 'خالدة'], ['iconic', 'أيقونية'], ['unstoppable', 'لا تُقهَر'],
+  ];
+  const [wordIdx, setWordIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setWordIdx((i) => (i + 1) % words.length), 2000);
+    return () => clearInterval(id);
+  }, [words.length]);
   const ticker = [
     T('Signage', 'آرمات'), T('Facades', 'واجهات'), T('Exhibition builds', 'معارض'), T('Offset printing', 'مطبوعات'),
     T('Social media', 'سوشيال ميديا'), T('Brand strategy', 'استراتيجية'),
@@ -176,29 +288,31 @@ function Hero({ onSurvey, onVisit }) {
   return (
     <section id="top" className="relative isolate overflow-hidden bg-canvas text-fg">
       <div className="grid-lines" aria-hidden="true" />
+      <div className="pointer-events-none absolute -end-24 top-1/2 -z-10 -translate-y-1/2 select-none opacity-[0.07] dark:opacity-[0.09] md:-end-10" aria-hidden="true">
+        <Mark variant="gold" className="h-[34rem] w-[34rem] md:h-[46rem] md:w-[46rem]" />
+      </div>
       <div className="relative mx-auto max-w-[92rem] px-5 md:px-8">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-line/15 pb-4 pt-24 text-[10px] uppercase tracking-[0.26em] text-subtle md:pt-28">
           <span>{T('Advertising · Fabrication · Media', 'إعلان · تنفيذ · ميديا')}</span>
           <span className="hidden sm:inline">{T('Amman, Jordan', 'عمّان، الأردن')}</span>
-          <span className="tabular-nums text-gold">{T('Est. 2013', 'تأسّست ٢٠١٣')}</span>
+          <span className="tabular-nums text-gold">{T('Since 2010', 'منذ ٢٠١٠')}</span>
         </div>
 
         <h1 className="display pb-8 pt-10 md:pb-12 md:pt-14">
           {T('We make brands ', 'نصنع علامات تجارية ')}
-          <span className="serif-italic text-gold">{T('impossible', 'يستحيل')}</span>{' '}
-          {T('to ignore.', 'تجاهلها.')}
+          <span key={wordIdx} className="serif-italic inline-block animate-fade text-gold">{words[wordIdx][lang === 'ar' ? 1 : 0]}.</span>
         </h1>
 
         <div className="grid gap-8 border-t border-line/15 pb-12 pt-7 md:grid-cols-12 md:items-start md:gap-8">
           <p className="max-w-xl text-[15px] leading-loose text-muted md:col-span-5">
             {T(
-              'Signage, facades, exhibition builds, print and social media — designed, fabricated and installed by one in-house team, with live pricing you can quote yourself.',
-              'آرمات وواجهات وتجهيز معارض ومطبوعات وسوشيال ميديا — تصميم وتصنيع وتركيب بفريق داخلي واحد، مع تسعير مباشر تحسبه بنفسك.',
+              'From signage and facades to exhibitions, print and social media — we design, fabricate and install everything in-house, so your brand looks the same everywhere and is delivered on time. Build your estimate instantly with our live pricing calculator.',
+              'من الآرمات والواجهات إلى المعارض والمطبوعات والسوشيال ميديا — نصمّم ونصنّع وننفّذ كل شيء بفريق واحد متكامل، لتظهر علامتك بهوية موحّدة وتُسلَّم في موعدها. احسب تكلفة مشروعك فورًا عبر حاسبة الأسعار المباشرة.',
             )}
           </p>
 
           <div className="flex gap-10 md:col-span-3">
-            {[['850+', T('Projects', 'مشروع')], ['12', T('Years', 'سنة')], ['4', T('Studios', 'أقسام')]].map(([n, l]) => (
+            {[['1,000+', T('Projects', 'مشروع')], ['16', T('Years', 'سنة')], ['4', T('Departments', 'أقسام')]].map(([n, l]) => (
               <div key={l}>
                 <p className="text-2xl font-extrabold tabular-nums text-fg">{n}</p>
                 <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-subtle">{l}</p>
@@ -370,39 +484,81 @@ function Services({ onBook }) {
         title={T('Signage, Cladding & Exhibition Booths', 'تنفيذ الآرمات والواجهات وتجهيز المعارض')}
         sub={T('From shop signs to double-deck exhibition stands — designed, fabricated and installed in-house.', 'من آرمات المحلات إلى بوثات المعارض ذات الطابقين — تصميم وتصنيع وتركيب بإشراف كامل.')}
       >
-        <div className="border-b border-line/15">
-          <ServiceGroup delay={0} icon={PanelTop} title={T('Flex & Banner', 'بانر وفليكس')} items={[T('Indoor / Outdoor Banners', 'بانرات داخلية وخارجية'), T('Backlit Flex', 'فليكس مضيء (Backlit)'), T('Vinyl Stickers & One-Way Vision', 'ستيكر فينيل ورؤية باتجاه واحد'), T('Roll-ups & Pop-ups', 'رول أب وبوب أب')]} />
-          <ServiceGroup delay={80} icon={Lightbulb} title={T('Alucobond & Cladding', 'ألكوبوند وتكسيات واجهات')} items={[T('ACP Cladding', 'تكسية ألكوبوند ACP'), T('3D Acrylic Letters', 'حروف بارزة أكريليك'), T('Stainless Steel Letters', 'حروف ستانلس ستيل'), T('Neon Flex & LED Front/Back-lit', 'نيون فليكس وإضاءة أمامية/خلفية')]} />
-          <ServiceGroup delay={160} icon={Layers} title={T('Securit Glass Works', 'واجهات وقواطع سيكوريت')} items={[T('Tempered glass facades', 'واجهات زجاج سيكوريت'), T('Frosted film stickers', 'ستيكر فروستد'), T('UV glass printing', 'طباعة UV على الزجاج'), T('Office partitions', 'قواطع مكاتب')]} />
+        <div className="grid gap-5 md:grid-cols-3 md:gap-6">
+          <ServiceCard
+            index={0} icon={PanelTop} img={unsplash('flex-banner')}
+            title={T('Flex & Banner', 'بانر وفليكس')}
+            desc={T('High-impact printed media for storefronts, events and campaigns — produced in-house for fast turnaround.', 'مطبوعات إعلانية عالية التأثير للمحلات والفعاليات والحملات — تُنفّذ داخليًا لسرعة التسليم.')}
+            items={[T('Indoor / Outdoor Banners', 'بانرات داخلية وخارجية'), T('Backlit Flex', 'فليكس مضيء (Backlit)'), T('Vinyl Stickers & One-Way Vision', 'ستيكر فينيل ورؤية باتجاه واحد'), T('Roll-ups & Pop-ups', 'رول أب وبوب أب')]}
+          />
+          <ServiceCard
+            index={1} icon={Lightbulb} img={unsplash('cladding')}
+            title={T('Alucobond, Signage & 3D Letters', 'ألكوبوند وآرمات وحروف بارزة')}
+            desc={T('Illuminated signage, 3D letters and facade cladding that give your building a sharp, lasting identity day and night.', 'آرمات مضيئة وحروف بارزة وتكسيات واجهات تمنح مبناك هوية واضحة وثابتة ليلًا ونهارًا.')}
+            items={[T('ACP Cladding', 'تكسية ألكوبوند ACP'), T('3D Acrylic Letters', 'حروف بارزة أكريليك'), T('Stainless Steel Letters', 'حروف ستانلس ستيل'), T('Neon Flex & LED Front/Back-lit', 'نيون فليكس وإضاءة أمامية/خلفية')]}
+          />
+          <ServiceCard
+            index={2} icon={Layers} img={unsplash('glass')}
+            title={T('Securit Glass Signage', 'آرمات وواجهات زجاج سيكوريت')}
+            desc={T('Tempered glass facades, partitions and branded film for clean, modern interiors and storefronts.', 'واجهات وقواطع زجاج سيكوريت وأفلام مطبوعة لتصاميم داخلية وواجهات محلات عصرية وأنيقة.')}
+            items={[T('Tempered glass facades', 'واجهات زجاج سيكوريت'), T('Frosted film stickers', 'ستيكر فروستد'), T('UV glass printing', 'طباعة UV على الزجاج'), T('Office partitions', 'قواطع مكاتب')]}
+          />
         </div>
 
         <div className="mt-12 grid gap-5 md:grid-cols-2 md:gap-6">
-          <Reveal className="glass card-hover p-6 md:p-7">
+          <Reveal className="group relative isolate overflow-hidden rounded-3xl border border-line/15 p-6 text-white md:p-7">
+            <PhotoBg src={unsplash('booth-standard')} />
             <div className="mb-4 flex items-center gap-3">
-              <span className="grid h-11 w-11 place-items-center rounded-2xl border border-line/12 bg-gold/12 text-gold"><Store size={17} aria-hidden="true" /></span>
-              <h3 className="text-lg font-bold tracking-tight">{T('Standard Shell Scheme Booths', 'بوثات ستاندرد')}</h3>
+              <span className="grid h-11 w-11 place-items-center rounded-2xl border border-white/25 bg-black/35 text-gold backdrop-blur-md"><Store size={17} aria-hidden="true" /></span>
+              <h3 className="text-lg font-bold tracking-tight text-white">{T('Standard Shell Scheme Booths', 'بوثات ستاندرد')}</h3>
             </div>
-            <p className="text-sm leading-loose text-muted">{T('Modular setups, fascia board branding, spotlights, basic counter & reception.', 'تجهيز مودولار، لوحة فاشيا بالهوية، سبوت لايت، كاونتر واستقبال أساسي.')}</p>
+            <p className="text-sm leading-loose text-white/85">{T('Modular setups, fascia board branding, spotlights, basic counter & reception.', 'تجهيز مودولار، لوحة فاشيا بالهوية، سبوت لايت، كاونتر واستقبال أساسي.')}</p>
           </Reveal>
 
-          <Reveal delay={90} className="glass card-hover border-gold/35 p-6 md:p-7">
+          <Reveal delay={90} className="group relative isolate overflow-hidden rounded-3xl border border-gold/50 p-6 text-white md:p-7">
+            <PhotoBg src={unsplash('booth-luxury')} />
             <div className="mb-4 flex items-center gap-3">
-              <span className="grid h-11 w-11 place-items-center rounded-2xl border border-gold/30 bg-gold/15 text-terra"><Store size={17} aria-hidden="true" /></span>
-              <h3 className="text-lg font-bold tracking-tight">{T('Customized Luxury Booths', 'بوثات كستمايزد مخصصة')}</h3>
+              <span className="grid h-11 w-11 place-items-center rounded-2xl border border-gold/40 bg-black/35 text-gold backdrop-blur-md"><Store size={17} aria-hidden="true" /></span>
+              <h3 className="text-lg font-bold tracking-tight text-white">{T('Customized Luxury Booths', 'بوثات كستمايزد مخصصة')}</h3>
             </div>
-            <p className="mb-5 text-sm leading-loose text-muted">{T('3D carpentry, double-deck, LED video walls, interactive kiosks, VIP lounge.', 'نجارة ثلاثية الأبعاد، طابقين، شاشات LED، أكشاك تفاعلية، صالة VIP.')}</p>
+            <p className="mb-5 text-sm leading-loose text-white/85">{T('3D carpentry, double-deck, LED video walls, interactive kiosks, VIP lounge.', 'نجارة ثلاثية الأبعاد، طابقين، شاشات LED، أكشاك تفاعلية، صالة VIP.')}</p>
             <BoothBrief />
           </Reveal>
         </div>
       </Section>
 
       <div className="border-y border-line/10 bg-surface-2/50">
-        <Section id="printing" kicker={T('02 — Printing', '٠٢ — المطبوعات')} title={T('Commercial & Offset / Digital Printing', 'المطبوعات التجارية والدعائية')}>
-          <div className="grid gap-x-16 border-b border-line/15 md:grid-cols-2">
-            <ServiceGroup delay={0} icon={Printer} title={T('Business Cards', 'كروت أعمال')} items={[T('Matt / Glossy', 'مات / لامع'), 'Spot UV', T('Textured paper', 'ورق مخمل'), T('Foil stamping', 'طباعة فويل')]} />
-            <ServiceGroup delay={70} icon={Printer} title={T('Flyers & Catalogs', 'فلايرات وكتالوجات')} items={[T('Flyers', 'فلايرات'), T('Brochures', 'بروشورات'), T('Catalogs', 'كتالوجات')]} />
-            <ServiceGroup delay={140} icon={Printer} title={T('Corporate Stationery', 'القرطاسية المؤسسية')} items={[T('Letterheads & Envelopes', 'ورق رسمي وظروف'), T('Folders', 'فولدرات'), T('NCR receipt/invoice books', 'سندات قبض وصرف وفواتير مكربنة')]} />
-            <ServiceGroup delay={210} icon={Printer} title={T('Packaging & Giveaways', 'التغليف والهدايا')} items={[T('Paper & carton bags, boxes', 'أكياس ورقية وكرتونية وبوكسات'), T('Shields & awards', 'دروع'), T('Pens, mugs, notebooks, T-shirts', 'أقلام، مجات، دفاتر، تيشيرتات')]} />
+        <Section
+          id="printing"
+          kicker={T('02 — Printing', '٠٢ — المطبوعات')}
+          title={T('Commercial & Offset / Digital Printing', 'المطبوعات التجارية والدعائية')}
+          sub={T('Sharp colour, premium finishes and consistent quality — from a single business card to a full corporate print run.', 'ألوان نقية وتشطيبات فاخرة وجودة ثابتة — من كرت أعمال واحد إلى حملة طباعة مؤسسية كاملة.')}
+        >
+          <div className="grid gap-5 sm:grid-cols-2 md:gap-6 xl:grid-cols-4">
+            <ServiceCard
+              index={0} icon={Printer} img={unsplash('print-cards')}
+              title={T('Business Cards', 'كروت أعمال')}
+              desc={T('Make a first impression that lasts, with premium stocks and finishes.', 'انطباع أول لا يُنسى بأوراق وتشطيبات فاخرة.')}
+              items={[T('Matt / Glossy', 'مات / لامع'), 'Spot UV', T('Textured paper', 'ورق مخمل'), T('Foil stamping', 'طباعة فويل')]}
+            />
+            <ServiceCard
+              index={1} icon={Printer} img={unsplash('print-flyers')}
+              title={T('Flyers & Catalogs', 'فلايرات وكتالوجات')}
+              desc={T('Brochures and catalogs that present your products clearly and sell.', 'بروشورات وكتالوجات تعرض منتجاتك بوضوح وتساعدك على البيع.')}
+              items={[T('Flyers', 'فلايرات'), T('Brochures', 'بروشورات'), T('Catalogs', 'كتالوجات')]}
+            />
+            <ServiceCard
+              index={2} icon={Printer} img={unsplash('print-stationery')}
+              title={T('Corporate Stationery', 'القرطاسية المؤسسية')}
+              desc={T('A consistent identity across every document your company sends out.', 'هوية موحّدة تظهر على كل مستند تصدره شركتك.')}
+              items={[T('Letterheads & Envelopes', 'ورق رسمي وظروف'), T('Folders', 'فولدرات'), T('NCR receipt/invoice books', 'سندات قبض وصرف وفواتير مكربنة')]}
+            />
+            <ServiceCard
+              index={3} icon={Printer} img={unsplash('print-packaging')}
+              title={T('Packaging & Giveaways', 'التغليف والهدايا')}
+              desc={T('Branded bags, boxes, awards and gifts that keep your name in hand.', 'أكياس وعلب ودروع وهدايا بشعارك تبقي اسمك حاضرًا.')}
+              items={[T('Paper & carton bags, boxes', 'أكياس ورقية وكرتونية وبوكسات'), T('Shields & awards', 'دروع'), T('Pens, mugs, notebooks, T-shirts', 'أقلام، مجات، دفاتر، تيشيرتات')]}
+            />
           </div>
         </Section>
       </div>
@@ -413,10 +569,25 @@ function Services({ onBook }) {
         title={T('Social Media Design & Management', 'تصميم وإدارة السوشيال ميديا')}
         sub={T('Full visual identity, creative content, motion/Reels and monthly account management.', 'هوية بصرية كاملة، تصاميم، موشن/ريلز، وإدارة شهرية متكاملة للحسابات.')}
       >
-        <div className="mb-14 border-b border-line/15">
-          <ServiceGroup delay={0} icon={Palette} title={T('Visual Identity', 'الهوية البصرية')} items={[T('Logo & brand guidelines', 'الشعار ودليل الهوية'), T('Full branding package', 'باقة هوية كاملة')]} />
-          <ServiceGroup delay={80} icon={Share2} title={T('Creative Designs', 'التصاميم الإبداعية')} items={[T('Posts, Stories, Carousels', 'بوستات، ستوريز، كاروسيل'), T('Motion graphics & Reels', 'موشن جرافيك وريلز')]} />
-          <ServiceGroup delay={160} icon={Share2} title={T('Account Management', 'إدارة الحسابات')} items={[T('Copywriting & scheduling', 'كتابة المحتوى والجدولة'), T('Replies & community', 'الردود وإدارة المجتمع'), T('Paid campaigns / Media Buying', 'حملات ممولة وشراء إعلانات')]} />
+        <div className="mb-14 grid gap-5 md:grid-cols-3 md:gap-6">
+          <ServiceCard
+            index={0} icon={Palette} img={unsplash('social-identity')}
+            title={T('Visual Identity', 'الهوية البصرية')}
+            desc={T('A distinctive identity — logo, colours and guidelines — that makes your brand recognisable everywhere.', 'هوية مميّزة من شعار وألوان ودليل استخدام تجعل علامتك معروفة في كل مكان.')}
+            items={[T('Logo & brand guidelines', 'الشعار ودليل الهوية'), T('Full branding package', 'باقة هوية كاملة')]}
+          />
+          <ServiceCard
+            index={1} icon={Share2} img={unsplash('social-creative')}
+            title={T('Creative Designs', 'التصاميم الإبداعية')}
+            desc={T('Scroll-stopping posts, stories and short videos designed to get noticed and shared.', 'بوستات وستوريز وفيديوهات قصيرة مصمّمة لتلفت الانتباه وتُشارَك.')}
+            items={[T('Posts, Stories, Carousels', 'بوستات، ستوريز، كاروسيل'), T('Motion graphics & Reels', 'موشن جرافيك وريلز')]}
+          />
+          <ServiceCard
+            index={2} icon={Share2} img={unsplash('social-management')}
+            title={T('Account Management', 'إدارة الحسابات')}
+            desc={T('We run your accounts end to end — content, community and paid campaigns — while you run your business.', 'ندير حساباتك بالكامل — المحتوى والمتابعين والحملات الممولة — لتتفرغ أنت لإدارة عملك.')}
+            items={[T('Copywriting & scheduling', 'كتابة المحتوى والجدولة'), T('Replies & community', 'الردود وإدارة المجتمع'), T('Paid campaigns / Media Buying', 'حملات ممولة وشراء إعلانات')]}
+          />
         </div>
 
         <div className="grid gap-5 md:grid-cols-3 md:gap-6">
@@ -470,13 +641,16 @@ function Consult() {
     if (r.error) setErr(r.error); else setDone(true);
   };
 
-  const chip = (on) => `border px-3 py-2 text-xs font-semibold transition ${
+  const chip = (on) => `min-h-11 border px-3 py-2 text-xs font-semibold transition sm:min-h-0 ${
     on ? 'border-gold bg-gold text-ink' : 'border-white/15 bg-transparent text-cream/65 hover:border-white/35 hover:text-cream'
   }`;
 
   return (
     <div className="relative isolate overflow-hidden bg-ink text-cream">
-      <section id="marketing" className="relative scroll-mt-24 px-5 py-20 md:px-8 md:py-28">
+      <div className="pointer-events-none absolute -start-24 top-1/2 -z-10 -translate-y-1/2 select-none opacity-[0.07] md:-start-10" aria-hidden="true">
+        <Mark variant="gold" className="h-[34rem] w-[34rem] md:h-[46rem] md:w-[46rem]" />
+      </div>
+      <section id="marketing" className="relative scroll-mt-24 px-5 py-14 sm:py-20 md:px-8 md:py-28">
         <div className="mx-auto max-w-[92rem]">
           <Reveal className="mb-12 grid gap-6 md:grid-cols-12 md:items-end md:gap-8">
             <div className="md:col-span-7">
@@ -487,22 +661,34 @@ function Consult() {
           </Reveal>
 
           <div className="grid gap-8 lg:grid-cols-2">
-            <div className="grid content-start gap-3 sm:grid-cols-2">
-              {[
-                [T('Market Research & Feasibility', 'دراسات السوق وتحليل الجدوى'), T('Pre-campaign validation', 'قبل إطلاق الحملات')],
-                [T('Competitor & SWOT Analysis', 'تحليل المنافسين و SWOT'), T('Find marketing gaps', 'اكتشاف الفجوات التسويقية')],
-                [T('Persona & GTM Strategy', 'الشخصيات واستراتيجية GTM'), T('Target audience mapping', 'تحديد الجمهور المستهدف')],
-                [T('360° Campaign Masterplan', 'خطة حملة 360°'), T('Online + Offline execution plan', 'خطة أونلاين وأوفلاين متكاملة')],
-              ].map(([a, b], i) => (
-                <Reveal key={a} delay={i * 70} className="glass-ink flex items-start gap-4 p-4 sm:p-5">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-gold/30 bg-gold/10 text-gold"><Compass size={16} aria-hidden="true" /></span>
-                  <div>
-                    <div className="text-[15px] font-bold leading-snug">{a}</div>
-                    <div className="mt-1 text-xs leading-relaxed text-cream/45">{b}</div>
-                  </div>
-                </Reveal>
-              ))}
-            </div>
+            <StrategyAccordion
+              items={[
+                {
+                  title: T('Market Research & Feasibility', 'دراسات السوق وتحليل الجدوى'),
+                  tag: T('Pre-campaign validation', 'قبل إطلاق الحملات'),
+                  desc: T('We study demand, pricing and customer behaviour in your market, then test whether the idea can make money — so your budget goes where results are proven, not guessed.', 'ندرس الطلب والأسعار وسلوك العملاء في سوقك، ثم نختبر جدوى الفكرة ماليًا — لتذهب ميزانيتك إلى ما ثبتت نتائجه لا إلى التخمين.'),
+                  points: [T('Demand & pricing study', 'دراسة الطلب والتسعير'), T('Feasibility & ROI estimate', 'جدوى مالية وعائد متوقع'), T('Go / no-go recommendation', 'توصية بالمضي أو التوقف')],
+                },
+                {
+                  title: T('Competitor & SWOT Analysis', 'تحليل المنافسين و SWOT'),
+                  tag: T('Find marketing gaps', 'اكتشاف الفجوات التسويقية'),
+                  desc: T('A clear picture of who you compete with, what they do well and where they are weak — and the positioning gaps your brand can own.', 'صورة واضحة عن منافسيك ونقاط قوتهم وضعفهم، والفجوات في السوق التي تستطيع علامتك أن تحتلها.'),
+                  points: [T('Competitor benchmarking', 'مقارنة مرجعية بالمنافسين'), T('SWOT workshop & report', 'ورشة وتقرير SWOT'), T('Positioning opportunities', 'فرص التموضع')],
+                },
+                {
+                  title: T('Persona & GTM Strategy', 'الشخصيات واستراتيجية GTM'),
+                  tag: T('Target audience mapping', 'تحديد الجمهور المستهدف'),
+                  desc: T('We define exactly who your customers are and build a go-to-market plan: the message, the channels and the launch sequence that reach them.', 'نحدد عملاءك بدقة ونبني خطة دخول السوق: الرسالة والقنوات وتسلسل الإطلاق الذي يصل إليهم.'),
+                  points: [T('Customer personas', 'شخصيات العملاء'), T('Messaging & channel plan', 'خطة الرسائل والقنوات'), T('Launch roadmap', 'خارطة الإطلاق')],
+                },
+                {
+                  title: T('360° Campaign Masterplan', 'خطة حملة 360°'),
+                  tag: T('Online + Offline execution plan', 'خطة أونلاين وأوفلاين متكاملة'),
+                  desc: T('One connected plan across signage, print, events and social media — with timeline, budget and KPIs — that our team can also execute for you.', 'خطة واحدة متكاملة تجمع الآرمات والمطبوعات والفعاليات والسوشيال ميديا — بجدول زمني وميزانية ومؤشرات أداء — ويمكن لفريقنا تنفيذها لك.'),
+                  points: [T('Integrated channel plan', 'خطة قنوات متكاملة'), T('Timeline, budget & KPIs', 'جدول وميزانية ومؤشرات'), T('In-house execution', 'تنفيذ داخلي')],
+                },
+              ]}
+            />
 
             <Reveal delay={120} className="glass-ink border-gold/35 p-6 sm:p-7">
               <h3 className="text-lg font-bold tracking-tight">{T('Book a Strategy Session', 'احجز جلسة استراتيجية')}</h3>
@@ -534,8 +720,8 @@ function Consult() {
                 {step === 2 && (
                   <div className="space-y-4">
                     <div>
-                      <label className="label">{T('Target market', 'السوق المستهدف')}</label>
-                      <input className="input !border-white/15 !bg-white/[0.06] !text-cream placeholder:text-cream/35" placeholder={T('e.g. Amman, Gulf, B2B...', 'مثال: عمّان، الخليج، B2B...')} value={f.market} onChange={set('market')} />
+                      <label className="label" htmlFor="consult-market">{T('Target market', 'السوق المستهدف')}</label>
+                      <input id="consult-market" className="input !border-white/15 !bg-white/[0.06] !text-cream placeholder:text-cream/35" placeholder={T('e.g. Amman, Gulf, B2B...', 'مثال: عمّان، الخليج، B2B...')} value={f.market} onChange={set('market')} />
                     </div>
                     <div>
                       <label className="label">{T('Budget (JOD)', 'الميزانية (دينار)')}</label>
@@ -550,10 +736,10 @@ function Consult() {
 
                 {step === 3 && (
                   <div className="space-y-3">
-                    {[['name', T('Full name', 'الاسم')], ['phone', T('Phone / WhatsApp', 'هاتف / واتساب')], ['email', T('Email', 'البريد')]].map(([k, l]) => (
+                    {[['name', T('Full name', 'الاسم'), 'text'], ['phone', T('Phone / WhatsApp', 'هاتف / واتساب'), 'tel'], ['email', T('Email', 'البريد'), 'email']].map(([k, l, type]) => (
                       <div key={k}>
-                        <label className="label">{l}</label>
-                        <input className="input !border-white/15 !bg-white/[0.06] !text-cream placeholder:text-cream/35" value={f[k]} onChange={set(k)} />
+                        <label className="label" htmlFor={`consult-${k}`}>{l}</label>
+                        <input id={`consult-${k}`} type={type} autoComplete={k === 'name' ? 'name' : k === 'phone' ? 'tel' : 'email'} className="input !border-white/15 !bg-white/[0.06] !text-cream placeholder:text-cream/35" value={f[k]} onChange={set(k)} />
                       </div>
                     ))}
                   </div>
@@ -577,21 +763,27 @@ function Consult() {
 }
 
 /* ================= Smart Calculator ================= */
-const Num = ({ l, v, on }) => (
-  <div>
-    <label className="label">{l}</label>
-    <input type="number" min="0" step="0.1" className="input" value={v} onChange={(e) => on(parseFloat(e.target.value) || 0)} />
-  </div>
-);
-const Sel = ({ l, v, on, opts }) => (
-  <div>
-    <label className="label">{l}</label>
-    <select className="input" value={v} onChange={(e) => on(e.target.value)}>{opts.map(([val, lab]) => <option key={val} value={val}>{lab}</option>)}</select>
-  </div>
-);
+const Num = ({ l, v, on }) => {
+  const id = useId();
+  return (
+    <div>
+      <label className="label" htmlFor={id}>{l}</label>
+      <input id={id} type="number" inputMode="decimal" min="0" step="0.1" className="input tabular-nums" value={v} onChange={(e) => on(parseFloat(e.target.value) || 0)} />
+    </div>
+  );
+};
+const Sel = ({ l, v, on, opts }) => {
+  const id = useId();
+  return (
+    <div>
+      <label className="label" htmlFor={id}>{l}</label>
+      <select id={id} className="input" value={v} onChange={(e) => on(e.target.value)}>{opts.map(([val, lab]) => <option key={val} value={val}>{lab}</option>)}</select>
+    </div>
+  );
+};
 const Chk = ({ l, v, on }) => (
   <label className="flex cursor-pointer items-start gap-2.5 text-sm text-muted">
-    <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-[#C9A45C]" checked={v} onChange={(e) => on(e.target.checked)} />
+    <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-gold" checked={v} onChange={(e) => on(e.target.checked)} />
     <span>{l}</span>
   </label>
 );
@@ -646,8 +838,8 @@ function CalculatorSection() {
     >
       <div className="mb-6 flex flex-wrap gap-2">
         {[['signage', Signpost, T('Signage / Booths', 'آرمات ومعارض')], ['printing', Printer, T('Printing', 'مطبوعات')], ['bundles', Share2, T('Marketing & Social', 'تسويق وسوشيال')]].map(([id, Icon, l]) => (
-          <button key={id} type="button" onClick={() => setCat(id)} data-active={cat === id} className="chip px-4 py-2 text-[13px]">
-            <Icon size={15} />{l}
+          <button key={id} type="button" onClick={() => setCat(id)} data-active={cat === id} aria-pressed={cat === id} className="chip px-4 py-2 text-[13px]">
+            <Icon size={15} aria-hidden="true" />{l}
           </button>
         ))}
       </div>
@@ -743,7 +935,7 @@ function CalculatorSection() {
                   <div className="flex shrink-0 items-center gap-3">
                     <b className="tabular-nums text-sm">{money(p.price)}</b>
                     <button
-                      className="btn-gold !h-8 !w-8 !px-0 text-sm"
+                      className="btn-gold !h-11 !w-11 !px-0 text-sm sm:!h-8 sm:!w-8"
                       aria-label={T('Add', 'إضافة')}
                       onClick={() => push({ label: { en: `Social Media — ${p.en}`, ar: `سوشيال ميديا — ${p.ar}` }, dept: 'social', price: p.price, detail: T('Monthly', 'شهري') })}
                     >
@@ -762,7 +954,7 @@ function CalculatorSection() {
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <b className="tabular-nums text-sm">{money(p.price)}</b>
-                    <button className="btn-gold !h-8 !w-8 !px-0 text-sm" aria-label={T('Add', 'إضافة')} onClick={() => addMk(k)}>+</button>
+                    <button className="btn-gold !h-11 !w-11 !px-0 text-sm sm:!h-8 sm:!w-8" aria-label={T('Add', 'إضافة')} onClick={() => addMk(k)}>+</button>
                   </div>
                 </div>
               ))}
@@ -874,13 +1066,13 @@ function QuoteForm({ onClose }) {
       ) : (
         <form className="grid gap-3 sm:grid-cols-2" onSubmit={send}>
           <input tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" name="website" value={f.website} onChange={set('website')} />
-          {[['name', T('Client name', 'اسم العميل'), 1], ['company', T('Company', 'الشركة')], ['phone', T('Phone / WhatsApp', 'هاتف / واتساب'), 1], ['email', T('Email', 'البريد'), 0, 'email'], ['tax', T('Tax number (optional)', 'الرقم الضريبي (إن وجد)')]].map(([k, l, req, type]) => (
+          {[['name', T('Client name', 'اسم العميل'), 1, 'text', 'name'], ['company', T('Company', 'الشركة'), 0, 'text', 'organization'], ['phone', T('Phone / WhatsApp', 'هاتف / واتساب'), 1, 'tel', 'tel'], ['email', T('Email', 'البريد'), 0, 'email', 'email'], ['tax', T('Tax number (optional)', 'الرقم الضريبي (إن وجد)'), 0, 'text', 'off']].map(([k, l, req, type, ac]) => (
             <div key={k}>
-              <label className="label">{l}</label>
-              <input type={type || 'text'} required={!!req} className="input" value={f[k]} onChange={set(k)} />
+              <label className="label" htmlFor={`quote-${k}`}>{l}</label>
+              <input id={`quote-${k}`} type={type} autoComplete={ac} required={!!req} className="input" value={f[k]} onChange={set(k)} />
             </div>
           ))}
-          <div className="sm:col-span-2"><label className="label">{T('Project notes', 'ملاحظات المشروع')}</label><textarea rows="3" className="input" value={f.notes} onChange={set('notes')} /></div>
+          <div className="sm:col-span-2"><label className="label" htmlFor="quote-notes">{T('Project notes', 'ملاحظات المشروع')}</label><textarea id="quote-notes" rows="3" className="input" value={f.notes} onChange={set('notes')} /></div>
           <label className="btn-ghost sm:col-span-2 cursor-pointer text-xs">
             <Upload size={14} />{f.file || T('Upload design / brief file', 'ارفع ملف التصميم / الموجز')}
             <input type="file" className="hidden" onChange={(e) => { setFileObj(e.target.files[0] || null); setF({ ...f, file: e.target.files[0]?.name || '' }); }} />
@@ -901,23 +1093,23 @@ function ClientsStrip() {
   const list = content.clients || [];
   if (!list.length) return null;
   return (
-    <section id="clients" className="relative scroll-mt-20 overflow-hidden border-y border-white/10 bg-ink px-5 py-16 text-cream md:px-8">
+    <section id="clients" className="relative scroll-mt-20 overflow-hidden border-y border-[#161616]/10 bg-[#FAF6F0] px-5 py-16 text-[#161616] md:px-8">
       <div className="mx-auto max-w-[92rem]">
-        <p className="mb-8 flex items-center gap-4 text-[10px] font-bold uppercase tracking-[0.24em] text-gold">
-          <span className="h-px w-8 shrink-0 bg-gold/50" aria-hidden="true" />
+        <p className="mb-8 flex items-center gap-4 text-[10px] font-bold uppercase tracking-[0.24em] text-[#9A7A35]">
+          <span className="h-px w-8 shrink-0 bg-[#C9A45C]/70" aria-hidden="true" />
           {T('Trusted by leading brands in Jordan', 'يثق بنا أبرز العلامات التجارية في الأردن')}
         </p>
-        <div className="grid grid-cols-2 border-s border-t border-white/10 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 border-s border-t border-[#161616]/10 sm:grid-cols-3 lg:grid-cols-5">
           {list.map((c, i) => (
             <Reveal
               key={c.id}
               delay={i * 50}
-              className="grid h-24 place-items-center border-b border-e border-white/10 px-4 transition duration-300 hover:bg-white/[0.05]"
+              className="grid h-24 place-items-center border-b border-e border-[#161616]/10 bg-white/60 px-4 transition duration-300 hover:bg-white"
               title={tx(c.name)}
             >
               {c.logo
                 ? <img src={c.logo} alt={tx(c.name)} loading="lazy" className="max-h-14 max-w-full object-contain" />
-                : <span className="text-center font-serif text-lg font-semibold leading-tight text-cream/85">{tx(c.name)}</span>}
+                : <span className="text-center font-serif text-lg font-semibold leading-tight text-[#161616]/80">{tx(c.name)}</span>}
             </Reveal>
           ))}
         </div>
@@ -929,9 +1121,84 @@ function ClientsStrip() {
 /* ================= Portfolio ================= */
 const GRADS = ['from-ink-3 to-ink', 'from-ink-2 to-ink-4', 'from-terra/85 to-ink', 'from-gold/75 to-ink-3', 'from-ink-4 to-terra/70', 'from-gold-dark/85 to-ink-2', 'from-ink to-ink-3', 'from-terra/70 to-ink-4'];
 
+/**
+ * Photo viewer for a single project: the card shows one cover photo, opening it shows
+ * the rest of that same place. Arrows move between photos (left = previous) and a
+ * horizontal drag does the same on touch. Escape / the backdrop close it (Dialog).
+ */
+function ProjectViewer({ project, onClose }) {
+  const { T, tx, lang } = useApp();
+  const shots = galleryOf(project);
+  const n = shots.length;
+  const many = n > 1;
+  const [i, setI] = useState(0);
+  const touchX = useRef(null);
+
+  useEffect(() => { setI(0); }, [project.id]);
+  useEffect(() => {
+    if (!many) return;
+    const onKey = (e) => {
+      if (e.key === 'ArrowRight') { e.preventDefault(); setI((v) => (v + 1) % n); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); setI((v) => (v - 1 + n) % n); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [many, n]);
+
+  if (!n) return null;
+  const cat = CATS.find(([k]) => k === project.cat);
+  return (
+    <Dialog onClose={onClose} label={tx(project.title)} xwide className="!max-w-5xl !bg-ink !p-0 text-white">
+      <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-white/50">{cat?.[lang === 'ar' ? 2 : 1]}</div>
+          <h3 className="truncate text-base font-bold">{tx(project.title)}</h3>
+          {tx(project.desc) && <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-white/60">{tx(project.desc)}</p>}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {many && <span className="text-[11px] tabular-nums text-white/60">{i + 1} / {n}</span>}
+          <button type="button" onClick={onClose} aria-label={T('Close', 'إغلاق')} className="icon-btn text-white"><X size={18} /></button>
+        </div>
+      </div>
+
+      <div
+        className="relative select-none bg-black"
+        onTouchStart={(e) => { touchX.current = e.touches[0]?.clientX ?? null; }}
+        onTouchEnd={(e) => {
+          const x0 = touchX.current;
+          touchX.current = null;
+          if (x0 == null || !many) return;
+          const dx = (e.changedTouches[0]?.clientX ?? x0) - x0;
+          if (Math.abs(dx) > 45) setI((v) => (v + (dx < 0 ? 1 : -1) + n) % n);
+        }}
+      >
+        <img src={shots[i]} alt={`${tx(project.title)} — ${i + 1}/${n}`} className="mx-auto max-h-[58vh] w-auto max-w-full object-contain" />
+        {many && (
+          <>
+            <button type="button" onClick={() => setI((v) => (v - 1 + n) % n)} aria-label={T('Previous photo', 'الصورة السابقة')} className="absolute start-2 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/55 text-white backdrop-blur transition hover:bg-black/80"><ChevronLeft size={20} /></button>
+            <button type="button" onClick={() => setI((v) => (v + 1) % n)} aria-label={T('Next photo', 'الصورة التالية')} className="absolute end-2 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/55 text-white backdrop-blur transition hover:bg-black/80"><ChevronRight size={20} /></button>
+          </>
+        )}
+      </div>
+
+      {many && (
+        <div className="flex gap-2 overflow-x-auto border-t border-white/10 p-3">
+          {shots.map((s, k) => (
+            <button key={s} type="button" onClick={() => setI(k)} aria-label={`${tx(project.title)} — ${k + 1}`} aria-current={k === i}
+              className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition ${k === i ? 'border-gold' : 'border-transparent opacity-55 hover:opacity-100'}`}>
+              <img src={s} alt="" className="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </Dialog>
+  );
+}
+
 function Portfolio() {
   const { T, tx, lang, content } = useApp();
   const [f, setF] = useState('all');
+  const [opened, setOpened] = useState(null);
   const items = content.projects || [];
   const used = CATS.filter(([k]) => items.some((p) => p.cat === k));
   const active = f === 'all' || used.some(([k]) => k === f) ? f : 'all';
@@ -945,34 +1212,53 @@ function Portfolio() {
     >
       <div className="mb-7 flex flex-wrap gap-2">
         {[['all', 'All', 'الكل'], ...used].map(([k, en, ar]) => (
-          <button key={k} type="button" onClick={() => setF(k)} data-active={active === k} className="chip px-4 py-2">
+          <button key={k} type="button" onClick={() => setF(k)} data-active={active === k} aria-pressed={active === k} className="chip px-4 py-2">
             {lang === 'ar' ? ar : en}
           </button>
         ))}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {items.filter((p) => active === 'all' || p.cat === active).map((p, i) => (
-          <Reveal
-            key={p.id}
-            delay={(i % 4) * 60}
-            className={`group relative aspect-[4/5] overflow-hidden rounded-2xl border border-line/15 transition duration-500 hover:border-gold/40 hover:shadow-[0_30px_60px_-34px_rgba(24,21,18,.55)] ${p.image ? 'bg-ink-2' : `bg-gradient-to-br ${GRADS[i % GRADS.length]}`}`}
-          >
-            {p.image
-              ? <img loading="lazy" src={p.image} alt={tx(p.title)} className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-[1.06]" />
-              : <Mark className="absolute -bottom-6 -end-6 h-40 opacity-15 transition duration-700 group-hover:scale-110 group-hover:opacity-30" />}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent opacity-90" aria-hidden="true" />
-            <span className="absolute start-4 top-4 text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">{String(i + 1).padStart(2, '0')}</span>
-            <div className="absolute inset-x-0 bottom-0 p-4 text-white">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-white/60">{CATS.find(([k]) => k === p.cat)?.[lang === 'ar' ? 2 : 1]}</div>
-              <div className="mt-1 text-sm font-bold leading-snug">{tx(p.title)}</div>
-              {tx(p.desc) && (
-                <div className="mt-1 max-h-0 overflow-hidden text-[11px] leading-relaxed text-white/75 opacity-0 transition-all duration-300 group-hover:max-h-20 group-hover:opacity-100">{tx(p.desc)}</div>
+        {items.filter((p) => active === 'all' || p.cat === active).map((p, i) => {
+          const cover = galleryOf(p)[0];
+          const count = galleryOf(p).length;
+          return (
+            <Reveal
+              key={p.id}
+              delay={(i % 4) * 60}
+              className={`group relative aspect-[4/5] overflow-hidden rounded-2xl border border-line/15 transition duration-500 focus-within:border-gold/60 hover:border-gold/40 hover:shadow-[0_30px_60px_-34px_rgba(24,21,18,.55)] ${cover ? 'bg-ink-2' : `bg-gradient-to-br ${GRADS[i % GRADS.length]}`}`}
+            >
+              {cover
+                ? <img loading="lazy" src={cover} alt={tx(p.title)} className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-[1.06]" />
+                : <Mark className="absolute -bottom-6 -end-6 h-40 opacity-15 transition duration-700 group-hover:scale-110 group-hover:opacity-30" />}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent opacity-90" aria-hidden="true" />
+              {count > 1 && (
+                <span className="absolute end-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[10px] font-bold tabular-nums text-white backdrop-blur">
+                  <Camera size={11} aria-hidden="true" />{count}
+                </span>
               )}
-            </div>
-          </Reveal>
-        ))}
+              <span className="absolute start-4 top-4 text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">{String(i + 1).padStart(2, '0')}</span>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4 text-white">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-white/60">{CATS.find(([k]) => k === p.cat)?.[lang === 'ar' ? 2 : 1]}</div>
+                <div className="mt-1 text-sm font-bold leading-snug">{tx(p.title)}</div>
+                {tx(p.desc) && (
+                  <div className="mt-1 max-h-0 overflow-hidden text-[11px] leading-relaxed text-white/75 opacity-0 transition-all duration-300 group-hover:max-h-20 group-hover:opacity-100 group-focus-within:max-h-20 group-focus-within:opacity-100">{tx(p.desc)}</div>
+                )}
+              </div>
+              {/* The cover is the click target: one project always opens its own photos, never a mixed set. */}
+              <button
+                type="button"
+                onClick={() => setOpened(p)}
+                aria-haspopup="dialog"
+                aria-label={count > 1 ? `${tx(p.title)} — ${count} ${T('photos', 'صورة')}` : tx(p.title)}
+                className="absolute inset-0 z-10 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+              />
+            </Reveal>
+          );
+        })}
       </div>
+
+      {opened && <ProjectViewer project={opened} onClose={() => setOpened(null)} />}
     </Section>
   );
 }
@@ -989,9 +1275,9 @@ function Testimonials() {
           {list.map((t, i) => (
             <Reveal key={t.id} delay={i * 80} as="figure" className="glass card-hover flex flex-col p-6">
               <div className="mb-4 flex items-center justify-between">
-                <div className="flex gap-0.5 text-gold" aria-label={`${t.rating || 5}/5`}>
+                <div className="flex gap-0.5 text-gold" role="img" aria-label={`${T('Rated', 'التقييم')} ${t.rating || 5}/5`}>
                   {Array.from({ length: 5 }).map((_, n) => (
-                    <Star key={n} size={13} className={n < (t.rating || 5) ? 'fill-current' : 'opacity-20'} />
+                    <Star key={n} size={13} aria-hidden="true" className={n < (t.rating || 5) ? 'fill-current' : 'opacity-20'} />
                   ))}
                 </div>
                 <Quote size={18} className="text-gold/30" />
@@ -1035,7 +1321,7 @@ function Footer({ onSurvey, onVisit }) {
 
         <div className="grid gap-8 border-t border-white/10 pt-10 md:grid-cols-[1.4fr_1fr_1fr]">
           <div>
-            <Logo className="h-10" />
+            <Logo dark className="h-10" />
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-cream/55">{tx(company.tagline)}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <a href="#" onClick={(e) => { e.preventDefault(); upd({ lang: lang === 'ar' ? 'en' : 'ar' }); }} className="chip !border-white/15 !text-cream/70 hover:!text-cream">
@@ -1058,10 +1344,20 @@ function Footer({ onSurvey, onVisit }) {
 
           <div className="text-sm">
             <h3 className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-cream/40">{T('Departments', 'الأقسام')}</h3>
+            {/* Real URLs, not anchors: these are the crawlable paths into the server-rendered
+                service pages. Section anchors stay in the nav above. */}
             <ul className="space-y-2 text-cream/60">
-              {[['signage', T('Signage & Booths', 'آرمات ومعارض')], ['printing', T('Printing', 'مطبوعات')], ['social', T('Social Media', 'سوشيال ميديا')], ['marketing', T('Strategy', 'استشارات')], ['calculator', T('Price Calculator', 'حاسبة الأسعار')]].map(([id, l]) => (
-                <li key={id}><a href={`#${id}`} className="transition hover:text-gold">{l}</a></li>
+              {[
+                ['signage-amman', T('Signage & facades', 'آرمات وواجهات')],
+                ['exhibition-booths-jordan', T('Exhibition booths', 'بوثات ومعارض')],
+                ['printing-amman', T('Printing', 'مطبوعات')],
+                ['social-media-management-amman', T('Social media', 'سوشيال ميديا')],
+                ['marketing-consulting-jordan', T('Strategy & research', 'استشارات ودراسات')],
+                ['signage-prices-jordan', T('Signage prices', 'أسعار اللوحات')],
+              ].map(([slug, l]) => (
+                <li key={slug}><a href={`/${lang}/${slug}`} className="transition hover:text-gold">{l}</a></li>
               ))}
+              <li><a href="#calculator" className="transition hover:text-gold">{T('Price calculator', 'حاسبة الأسعار')}</a></li>
             </ul>
           </div>
         </div>
