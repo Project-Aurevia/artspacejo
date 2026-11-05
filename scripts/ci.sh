@@ -17,6 +17,7 @@ mkdir -p "$DATA_DIR"
 if [ -d "$ROOT/data" ]; then
   cp -r "$ROOT/data"/* "$DATA_DIR"/ 2>/dev/null || true
 fi
+E2E_PASSWORD="${E2E_PASSWORD:-testpassword123}"
 : "${E2E_PASSWORD:?Set E2E_PASSWORD (the owner password) to run the end-to-end checks}"
 export E2E_PASSWORD
 export NODE_ENV=production
