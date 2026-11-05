@@ -23,7 +23,7 @@ export const ROOT = {
   full: true,
   active: true,
   locked: true,
-  hash: process.env.E2E_PASSWORD ? hashPw(process.env.E2E_PASSWORD) : 'scrypt$eda0fe6934b1b55d07b952f090d6e9eb$d2f2fd45fcf45856a745bbb99862cfb754aecb8c5eb8e35dc6cbe823d5cea912ed285baf8a966fbe9ba1a2b608e9bffc2d7716039b7fbe83cf795256fe93cc84',
+  hash: process.env.E2E_PASSWORD ? hashPw(process.env.E2E_PASSWORD) : "scrypt$0159c0b7ad21fe4c948d664e60de4330$740feb3835abf9dad672771db124a32845fdf2d9e9b2fc22c84d1a0c3b56b86f6e8a1f68db93781c06a0aa56611309330ceb9e095146eba45d269ddda964d6f6",
 };
 // Verified against when the email is unknown, so a wrong email costs the same time as a wrong password.
 export const DUMMY_HASH = hashPw('not-a-real-password');
